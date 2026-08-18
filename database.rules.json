@@ -1,0 +1,12 @@
+{
+  "rules": {
+    "vault": {
+      ".read": "auth != null && (auth.token.email === 'lee@jbp-tracker.app' || auth.token.email === 'sk@jbp-tracker.app' || auth.token.email === 'ramya@jbp-tracker.app')",
+      ".write": "auth != null && (auth.token.email === 'lee@jbp-tracker.app' || auth.token.email === 'sk@jbp-tracker.app' || auth.token.email === 'ramya@jbp-tracker.app')"
+    },
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Firebase deploy cache (auto-generated on each deploy)
+.firebase/
+firebase-debug.log*
+database-debug.log*
+*.log
+
+# Node (not used by this static app, but just in case)
+node_modules/
+
+# OS junk
+.DS_Store
+Thumbs.db

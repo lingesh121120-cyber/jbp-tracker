@@ -1,0 +1,1978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JBP Payments &amp; Claim Tracker</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<!-- Firebase (compat build — works with plain scripts) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* Firebase project config — apiKey here is a public identifier, NOT a secret. Real protection = Auth + security rules + on-device encryption. */
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyCih22m2pw6ml2YnI_IMxu0Gii9WPgUQSg",
+  authDomain:"jbp-tracker-e232ca.firebaseapp.com",
+  databaseURL:"https://jbp-tracker-e232ca-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"jbp-tracker-e232ca",
+  storageBucket:"jbp-tracker-e232ca.firebasestorage.app",
+  messagingSenderId:"1095109818801",
+  appId:"1:1095109818801:web:4edb24ac75457a52f06590"
+};
+let FB_OK=false;
+try{ if(window.firebase&&firebase.initializeApp){ firebase.initializeApp(FIREBASE_CONFIG); FB_OK=true; } }catch(e){ console.warn('Firebase init failed',e); }
+function fbAuth(){return firebase.auth();}
+function fbDb(){return firebase.database();}
+/* username <-> Firebase email mapping (placeholder emails, per your choice) */
+const CLOUD_EMAIL_DOMAIN='jbp-tracker.app';
+function userToEmail(u){return String(u||'').trim().toLowerCase()+'@'+CLOUD_EMAIL_DOMAIN;}
+</script>
+
+<style>
+:root{
+  --primary:#3551E0; --primary2:#6D5BF6; --primary-dark:#2740c4; --primary-soft:#e8ecfd;
+  --success:#0EA868; --success-soft:#d7f4e7;
+  --warning:#E0921B; --warning-soft:#fbeccd;
+  --danger:#E0484B;  --danger-soft:#fbe0e1;
+  --teal:#0E9AA8; --violet:#6D5BF6; --gold:#C99A2E;
+  --bg:#F4F6FB; --card:#ffffff; --ink:#0B1220; --text:#15203A; --muted:#697892; --line:#E6EAF3;
+  --radius:18px; --radius-sm:13px;
+  --shadow:0 18px 40px -22px rgba(20,30,70,.30);
+  --shadow-sm:0 8px 22px -14px rgba(20,30,70,.26);
+  --shadow-lg:0 30px 70px -28px rgba(20,30,70,.40);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:'Inter',system-ui,sans-serif;
+  background:
+    radial-gradient(1000px 520px at 108% -8%, #e9ecff 0%, transparent 55%),
+    radial-gradient(820px 460px at -8% 112%, #def4ec 0%, transparent 52%),
+    var(--bg);
+  color:var(--text);-webkit-font-smoothing:antialiased;line-height:1.45;
+}
+h1,h2,h3,h4,.brand h1{font-family:'Sora','Inter',sans-serif}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#c4ccdc;border-radius:20px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:#9aa6bd;background-clip:content-box}
+
+/* ---------- Layout ---------- */
+.app{display:grid;grid-template-columns:264px 1fr;min-height:100vh}
+.sidebar{
+  background:linear-gradient(185deg,#0B1124 0%, #111A38 55%, #0C1530 100%);
+  color:#aeb9d4;padding:22px 16px;position:sticky;top:0;height:100vh;
+  display:flex;flex-direction:column;gap:4px;z-index:40;border-right:1px solid rgba(255,255,255,.04);
+}
+.brand{display:flex;align-items:center;gap:13px;padding:6px 8px 20px;border-bottom:1px solid rgba(255,255,255,.07);margin-bottom:8px}
+.brand .logo{
+  width:46px;height:46px;border-radius:14px;flex:none;
+  background:linear-gradient(135deg,#3551E0,#6D5BF6 70%, #22d3ee);
+  display:grid;place-items:center;font-weight:800;color:#fff;font-size:1.05rem;letter-spacing:.5px;
+  box-shadow:0 10px 26px -8px rgba(78,90,246,.8), inset 0 1px 0 rgba(255,255,255,.3);
+}
+.brand h1{font-size:1.02rem;color:#fff;font-weight:800;letter-spacing:.2px}
+.brand span{font-size:.66rem;color:#7c89a8;text-transform:uppercase;letter-spacing:2px;font-weight:600}
+.nav-label{font-size:.62rem;text-transform:uppercase;letter-spacing:1.6px;color:#586183;padding:16px 12px 7px;font-weight:700}
+.nav-item{
+  display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:12px;
+  cursor:pointer;font-size:.86rem;font-weight:600;color:#9aa6c4;transition:.18s;position:relative;
+}
+.nav-item svg{width:18px;height:18px;flex:none;opacity:.9}
+.nav-item:hover{background:rgba(255,255,255,.055);color:#eaf0ff}
+.nav-item.active{background:linear-gradient(95deg,rgba(78,90,246,.28),rgba(53,81,224,.08));color:#fff;box-shadow:inset 0 0 0 1px rgba(120,140,255,.18)}
+.nav-item.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:linear-gradient(#6D5BF6,#22d3ee)}
+.sidebar-foot{margin-top:auto;padding:14px 12px 4px;border-top:1px solid rgba(255,255,255,.07);font-size:.74rem;color:#586183}
+.sidebar-foot b{color:#cdd6ea;font-weight:700}
+
+.main{min-width:0;display:flex;flex-direction:column}
+.topbar{
+  position:sticky;top:0;z-index:30;backdrop-filter:blur(12px);
+  background:rgba(244,246,251,.82);border-bottom:1px solid var(--line);
+  padding:15px 30px;display:flex;align-items:center;gap:16px;
+}
+.topbar .menu-btn{display:none;background:#fff;border:1px solid var(--line);border-radius:11px;width:40px;height:40px;font-size:1.1rem;cursor:pointer}
+.topbar h2{font-size:1.18rem;font-weight:800;letter-spacing:-.2px}
+.topbar .sub{font-size:.78rem;color:var(--muted);margin-top:1px}
+.topbar .spacer{flex:1}
+.pill{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);padding:7px 14px;border-radius:30px;font-size:.78rem;font-weight:700;box-shadow:var(--shadow-sm);color:#42506e}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 0 3px var(--success-soft)}
+.avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#3551E0,#6D5BF6);color:#fff;display:grid;place-items:center;font-weight:800;font-size:.84rem;box-shadow:0 8px 18px -8px rgba(78,90,246,.8)}
+
+.content{padding:26px 30px 64px;max-width:1560px;width:100%;margin:0 auto}
+.view{display:none;animation:fade .35s ease}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---------- Buttons ---------- */
+.btn{cursor:pointer;border:none;border-radius:12px;padding:10px 17px;font-size:.83rem;font-weight:700;font-family:inherit;display:inline-flex;align-items:center;gap:8px;transition:.16s;white-space:nowrap}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;box-shadow:0 10px 22px -10px rgba(78,90,246,.9)}
+.btn-primary:hover{filter:brightness(1.07)}
+.btn-ghost{background:#fff;border:1px solid var(--line);color:var(--text)}
+.btn-ghost:hover{border-color:#c8d2e6;background:#fbfcff}
+.btn-danger{background:var(--danger-soft);color:#bb2f32}
+.btn-danger:hover{background:#f7cccd}
+.btn-sm{padding:8px 13px;font-size:.78rem;border-radius:10px}
+.btn-icon{padding:8px;width:34px;height:34px;justify-content:center}
+
+/* ---------- Cards ---------- */
+.card{background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow-sm);border-radius:var(--radius)}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:6px 2px 18px;flex-wrap:wrap}
+.section-head h3{font-size:1.08rem;font-weight:800}
+.section-head p{font-size:.8rem;color:var(--muted)}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kpi{position:relative;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 18px 17px;box-shadow:var(--shadow-sm);overflow:hidden;transition:.22s}
+.kpi::before{content:"";position:absolute;left:0;top:0;right:0;height:4px;background:var(--c,var(--primary));opacity:.95}
+.kpi:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg);border-color:#d6deef}
+.kpi .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}
+.kpi .ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:color-mix(in srgb,var(--c,var(--primary)) 13%, white);color:var(--c,var(--primary))}
+.kpi .ic svg{width:22px;height:22px}
+.kpi .growth{font-size:.7rem;font-weight:800;padding:4px 9px;border-radius:30px;background:var(--success-soft);color:#0a7d4e;white-space:nowrap}
+.kpi .growth.down{background:var(--warning-soft);color:#9a6510}
+.kpi .growth.flat{background:#eef1f7;color:#5d6b86}
+.kpi .val{font-size:1.62rem;font-weight:800;letter-spacing:-.6px;font-family:'Sora',sans-serif}
+.kpi .lbl{font-size:.78rem;color:var(--muted);font-weight:600;margin-top:3px}
+
+/* Charts */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.chart-card{padding:22px}
+.chart-card h4{font-size:.94rem;font-weight:800}
+.chart-card .csub{font-size:.75rem;color:var(--muted);margin:2px 0 16px}
+.chart-box{position:relative;height:248px}
+
+/* Activity */
+.activity{padding:22px}
+.activity ul{list-style:none;display:flex;flex-direction:column;gap:2px}
+.activity li{display:flex;gap:13px;padding:11px 8px;border-radius:12px;transition:.15s}
+.activity li:hover{background:#f6f8fd}
+.act-ic{width:36px;height:36px;border-radius:11px;flex:none;display:grid;place-items:center;font-size:.92rem}
+.act-body{flex:1;min-width:0}
+.act-body .t{font-size:.84rem;font-weight:600}
+.act-body .d{font-size:.74rem;color:var(--muted);text-transform:capitalize}
+.act-time{font-size:.7rem;color:#9aa6bd;white-space:nowrap;font-weight:600}
+
+/* Campaign cards */
+.camp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+.camp-card{padding:20px;cursor:pointer;transition:.2s;position:relative;overflow:hidden}
+.camp-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(var(--primary),var(--primary2));opacity:.85}
+.camp-card:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg);border-color:#cdd7ee}
+.camp-card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:5px}
+.camp-card .name{font-size:1.02rem;font-weight:800}
+.camp-card .code{font-size:.72rem;color:var(--muted);font-family:ui-monospace,monospace;margin-top:2px}
+.camp-card .fychip{font-size:.66rem;font-weight:700;color:#42506e;background:#eef1f8;border:1px solid var(--line);padding:2px 8px;border-radius:20px;margin-top:8px;display:inline-block}
+.util-wrap{margin:15px 0 12px}
+.util-bar{height:9px;border-radius:9px;background:#eef1f7;overflow:hidden}
+.util-bar > span{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,var(--primary),#22d3ee);transition:width .6s}
+.util-meta{display:flex;justify-content:space-between;font-size:.73rem;color:var(--muted);margin-top:7px;font-weight:600}
+.camp-mini{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:15px;padding-top:15px;border-top:1px dashed var(--line)}
+.camp-mini .m .v{font-size:.96rem;font-weight:800}
+.camp-mini .m .k{font-size:.64rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-top:2px}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:20px;font-size:.72rem;font-weight:700;white-space:nowrap}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.badge.paid,.badge.submitted,.badge.active,.badge.received{background:var(--success-soft);color:#0a7d4e}
+.badge.pending,.badge.notsub,.badge.partial{background:var(--warning-soft);color:#9a6510}
+.badge.completed{background:var(--primary-soft);color:#2740c4}
+.badge.draft,.badge.closed,.badge.notrec,.badge.notreq{background:#eef1f7;color:#54627e}
+
+/* Tables */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.input,.select{background:#fff;border:1px solid var(--line);border-radius:12px;color:var(--text);padding:10px 13px;font-size:.83rem;font-family:inherit;outline:none;transition:.16s}
+.input:focus,.select:focus{border-color:var(--primary);box-shadow:0 0 0 4px var(--primary-soft)}
+.search{flex:1;min-width:200px;position:relative}
+.search input{width:100%;padding-left:38px}
+.search svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:#9aa6bd}
+.suggest{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);z-index:20;overflow:hidden;display:none}
+.suggest.show{display:block}
+.suggest div{padding:9px 14px;font-size:.82rem;cursor:pointer}
+.suggest div:hover{background:#f1f4fb}
+
+.table-card{overflow:hidden}
+.table-scroll{overflow-x:auto;max-height:68vh;overflow-y:auto}
+table{width:100%;border-collapse:separate;border-spacing:0}
+.wide{min-width:1100px}
+thead th{position:sticky;top:0;z-index:5;background:#eef1f8;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.6px;color:#54627e;font-weight:800;padding:13px 12px;white-space:nowrap;border-bottom:1px solid var(--line);user-select:none}
+thead th.sortable{cursor:pointer}
+thead th .arr{opacity:.35;font-size:.7rem}
+thead th.sorted .arr{opacity:1;color:var(--primary)}
+tbody td{padding:8px 12px;border-bottom:1px solid #eef1f7;font-size:.84rem;vertical-align:middle;white-space:nowrap}
+tbody tr{transition:.12s}
+tbody tr:hover td{background:#f7f9ff}
+.cell-edit{background:transparent;border:1px solid transparent;border-radius:9px;color:var(--text);font-size:.84rem;font-family:inherit;padding:6px 8px;width:100%;min-width:90px;transition:.14s}
+.cell-edit:hover{border-color:var(--line);background:#fff}
+.cell-edit:focus{border-color:var(--primary);background:#fff;box-shadow:0 0 0 3px var(--primary-soft);outline:none}
+select.cell-edit{cursor:pointer}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.token{font-family:ui-monospace,monospace;font-weight:800;letter-spacing:1px;color:var(--primary);background:var(--primary-soft);padding:3px 9px;border-radius:8px;font-size:.8rem}
+td .row-actions{display:flex;gap:6px}
+
+.pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;flex-wrap:wrap}
+.pginfo{font-size:.78rem;color:var(--muted);font-weight:600}
+.pg-btns{display:flex;gap:6px;align-items:center}
+.pg-btns button{min-width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:700;font-size:.8rem}
+.pg-btns button:hover:not(:disabled){border-color:var(--primary);color:var(--primary)}
+.pg-btns button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.pg-btns button:disabled{opacity:.4;cursor:not-allowed}
+
+/* Empty / skeleton */
+.empty{text-align:center;padding:54px 20px;color:var(--muted)}
+.empty .e-ic{font-size:2.4rem;margin-bottom:10px;opacity:.7}
+.empty h4{font-size:1rem;color:var(--text);margin-bottom:4px}
+.empty p{font-size:.82rem;margin-bottom:16px}
+
+/* Modal */
+.overlay{position:fixed;inset:0;background:rgba(11,18,36,.55);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+.overlay.open{display:flex;animation:fade .2s}
+.modal{background:#fff;border-radius:22px;width:580px;max-width:96vw;max-height:92vh;overflow:auto;box-shadow:var(--shadow-lg)}
+.modal.sm{width:440px}
+.modal-head{padding:24px 26px 0;display:flex;justify-content:space-between;align-items:flex-start}
+.modal-head h3{font-size:1.16rem;font-weight:800}
+.modal-head p{font-size:.78rem;color:var(--muted);margin-top:3px}
+.x{background:#f1f4fb;border:none;width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:1rem;color:#54627e}
+.x:hover{background:#e6ebf5}
+.modal-body{padding:18px 26px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field.full{grid-column:1/-1}
+.field label{font-size:.74rem;font-weight:700;color:#54627e}
+.field input,.field select,.field textarea{background:#f7f9fc;border:1px solid var(--line);border-radius:12px;padding:10px 13px;font-size:.85rem;font-family:inherit;color:var(--text);outline:none;transition:.16s;width:100%;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--primary);background:#fff;box-shadow:0 0 0 4px var(--primary-soft)}
+.modal-foot{padding:8px 26px 26px;display:flex;gap:10px;justify-content:flex-end}
+.calc-box{background:linear-gradient(135deg,#eef3ff,#ecf6f3);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:9px}
+.cb-row{display:flex;justify-content:space-between;align-items:center;font-size:.84rem;font-weight:600;color:#54627e}
+.cb-row b{font-size:1rem;font-family:'Sora',sans-serif;color:var(--text)}
+
+/* Toast */
+.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:200;display:flex;flex-direction:column;gap:10px}
+.toast{display:flex;align-items:center;gap:10px;background:#fff;border-left:4px solid var(--success);padding:13px 19px;border-radius:13px;box-shadow:var(--shadow-lg);font-size:.83rem;font-weight:700;transform:translateX(120%);transition:.32s cubic-bezier(.2,.8,.2,1);min-width:250px}
+.toast.show{transform:none}
+.toast.warn{border-color:var(--warning)} .toast.err{border-color:var(--danger)} .toast.info{border-color:var(--primary)}
+
+/* Login */
+.login-screen{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:radial-gradient(800px 500px at 80% -10%,#1c2a55 0%,transparent 55%),linear-gradient(135deg,#0B1124,#162247 60%,#0E2A3A)}
+.login-screen.hide{display:none}
+.login-card{background:#fff;border-radius:24px;padding:38px 34px;width:410px;max-width:94vw;box-shadow:0 50px 110px -30px rgba(0,0,0,.7);animation:fade .4s}
+.login-brand{display:flex;align-items:center;gap:13px;margin-bottom:26px}
+.login-brand .logo{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#3551E0,#6D5BF6 70%,#22d3ee);display:grid;place-items:center;font-weight:800;color:#fff;box-shadow:0 10px 26px -8px rgba(78,90,246,.8)}
+.login-brand h1{font-size:1.06rem;font-weight:800}
+.login-brand span{font-size:.64rem;color:#8a96b3;text-transform:uppercase;letter-spacing:2px;font-weight:700}
+.login-card h2{font-size:1.4rem;font-weight:800}
+.login-card .lsub{font-size:.8rem;color:var(--muted);margin:2px 0 22px;display:flex;align-items:center;gap:6px}
+.login-field{margin-bottom:15px}
+.login-field label{display:block;font-size:.74rem;font-weight:700;color:#54627e;margin-bottom:6px}
+.login-field input{width:100%;background:#f7f9fc;border:1px solid var(--line);border-radius:13px;padding:12px 15px;font-size:.92rem;outline:none;font-family:inherit;transition:.16s}
+.login-field input:focus{border-color:var(--primary);box-shadow:0 0 0 4px var(--primary-soft);background:#fff}
+.login-err{color:var(--danger);font-size:.8rem;font-weight:700;min-height:20px;margin-bottom:6px}
+.login-foot{margin-top:18px;font-size:.72rem;color:#9aa6bd;text-align:center}
+.icon-btn{background:#fff;border:1px solid var(--line);border-radius:11px;height:38px;padding:0 12px;cursor:pointer;font-weight:700;font-size:.8rem;color:#54627e;display:inline-flex;align-items:center;gap:6px}
+.icon-btn:hover{border-color:var(--primary);color:var(--primary)}
+.ws-chip{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;font-weight:800;font-size:.74rem;padding:8px 15px;border-radius:30px;box-shadow:var(--shadow-sm);letter-spacing:.3px;white-space:nowrap}
+
+/* Intro animation */
+.intro-screen{position:fixed;inset:0;z-index:1100;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(900px 600px at 50% 40%,#1a2a5e 0%,#0b1124 60%,#070b18 100%)}
+.intro-screen.hide{display:none}
+.intro-skip{position:absolute;top:22px;right:24px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#cdd6ea;padding:8px 16px;border-radius:30px;font-weight:700;font-size:.8rem;cursor:pointer;z-index:5}
+.intro-skip:hover{background:rgba(255,255,255,.16)}
+.intro-stage{position:relative;width:320px;height:300px;display:flex;align-items:center;justify-content:center;perspective:1500px}
+.intro-glow{position:absolute;width:380px;height:380px;border-radius:50%;background:radial-gradient(circle,rgba(110,91,246,.45),transparent 60%);opacity:0;filter:blur(22px);z-index:0}
+.intro-fold{position:absolute;top:10px;height:280px;width:50%;background:linear-gradient(135deg,#3551E0,#6D5BF6);box-shadow:0 0 70px rgba(78,90,246,.55);z-index:2}
+.intro-fold.fold-l{left:10px;transform-origin:right center;border-radius:20px 4px 4px 20px}
+.intro-fold.fold-r{right:10px;transform-origin:left center;border-radius:4px 20px 20px 4px}
+.intro-core{position:relative;z-index:4;text-align:center;opacity:0}
+.intro-logo{width:84px;height:84px;margin:0 auto 18px;border-radius:23px;background:linear-gradient(135deg,#3551E0,#6D5BF6 70%,#22d3ee);display:grid;place-items:center;color:#fff;font-weight:800;font-size:1.7rem;letter-spacing:1px;box-shadow:0 18px 50px -10px rgba(78,90,246,.9)}
+.intro-title{color:#fff;font-family:'Sora',sans-serif;font-weight:800;font-size:1.32rem;letter-spacing:.3px}
+.intro-sub{color:#8a97bd;font-size:.78rem;margin-top:7px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700}
+.intro-stage.go .fold-l{animation:foldL 1.5s cubic-bezier(.7,0,.2,1) forwards}
+.intro-stage.go .fold-r{animation:foldR 1.5s cubic-bezier(.7,0,.2,1) forwards}
+.intro-stage.go .intro-core{animation:coreIn 1s ease .85s forwards}
+.intro-stage.go .intro-glow{animation:glowP 2.2s ease .7s forwards}
+@keyframes foldL{0%,45%{transform:rotateY(0)}100%{transform:rotateY(-118deg);opacity:0}}
+@keyframes foldR{0%,45%{transform:rotateY(0)}100%{transform:rotateY(118deg);opacity:0}}
+@keyframes coreIn{0%{opacity:0;transform:scale(.7)}60%{opacity:1;transform:scale(1.06)}100%{opacity:1;transform:scale(1)}}
+@keyframes glowP{0%{opacity:0;transform:scale(.6)}50%{opacity:1}100%{opacity:.6;transform:scale(1.2)}}
+
+/* Portal chooser */
+.portal-screen{position:fixed;inset:0;z-index:1000;overflow:auto;padding:24px;display:flex;flex-direction:column;
+  background:radial-gradient(800px 500px at 80% -10%,#1c2a55,transparent 55%),linear-gradient(135deg,#0B1124,#162247 60%,#0E2A3A)}
+.portal-screen.hide{display:none}
+.portal-top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.portal-top .login-brand{margin:0}
+.portal-top .login-brand h1{color:#fff}
+.portal-user{display:flex;align-items:center;gap:12px;color:#cdd6ea;font-size:.82rem;font-weight:700}
+.portal-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:34px 10px}
+.portal-h{color:#fff;font-size:2rem;font-weight:800}
+.portal-p{color:#9aa6c4;margin:8px 0 36px;font-size:.95rem}
+.portal-cards{display:grid;grid-template-columns:1fr 1fr;gap:24px;width:100%;max-width:800px}
+.portal-card{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:32px 28px;cursor:pointer;transition:.25s;text-align:left;position:relative;overflow:hidden}
+.portal-card::before{content:"";position:absolute;left:0;top:0;right:0;height:4px;background:linear-gradient(90deg,#3551E0,#22d3ee)}
+.portal-card.pc-vivo::before{background:linear-gradient(90deg,#0E9AA8,#22d3ee)}
+.portal-card:hover{transform:translateY(-6px);background:rgba(255,255,255,.09);border-color:rgba(120,140,255,.5);box-shadow:0 30px 70px -24px rgba(0,0,0,.6)}
+.pc-ic{font-size:2.3rem;margin-bottom:14px}
+.portal-card h2{color:#fff;font-size:1.4rem;font-weight:800}
+.portal-card p{color:#9aa6c4;font-size:.86rem;margin:8px 0 16px;min-height:42px}
+.pc-stat{display:inline-block;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#cdd6ea;font-size:.75rem;font-weight:700;padding:5px 13px;border-radius:30px}
+.pc-go{color:#9db4ff;font-weight:800;font-size:.86rem;margin-top:18px}
+.portal-card.pc-vivo .pc-go{color:#5fe0ea}
+@media(max-width:640px){.portal-cards{grid-template-columns:1fr}}
+
+/* Reports / tiles */
+.report-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:14px;margin-bottom:22px}
+.stat-tile{padding:17px;background:var(--card);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow-sm);position:relative;overflow:hidden}
+.stat-tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--tc,var(--primary));opacity:.8}
+.stat-tile .k{font-size:.72rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.stat-tile .v{font-size:1.4rem;font-weight:800;margin-top:7px;font-family:'Sora',sans-serif}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.list-card{padding:20px}
+.list-card h4{font-size:.94rem;font-weight:800;margin-bottom:14px}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.bar-row .nm{width:130px;font-size:.78rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-row .track{flex:1;height:10px;background:#eef1f7;border-radius:8px;overflow:hidden}
+.bar-row .track > span{display:block;height:100%;border-radius:8px;background:linear-gradient(90deg,var(--primary),#22d3ee)}
+.bar-row .amt{width:70px;text-align:right;font-size:.78rem;font-weight:800;font-variant-numeric:tabular-nums}
+
+/* Details / breadcrumb */
+.crumb{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted);margin-bottom:14px;font-weight:600}
+.crumb a{color:var(--primary);cursor:pointer;font-weight:700}
+.detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.detail-head h2{font-size:1.5rem;font-weight:800}
+
+
+/* Claim received lookup */
+.lookup{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;padding:24px;margin-bottom:18px}
+.lookup .big-input{font-family:ui-monospace,monospace;font-size:1.5rem;letter-spacing:6px;font-weight:800;text-align:center;width:200px;padding:12px;border:2px solid var(--line);border-radius:14px;color:var(--primary);background:#f7f9fc}
+.lookup .big-input:focus{border-color:var(--primary);box-shadow:0 0 0 5px var(--primary-soft);outline:none}
+.result-card{padding:24px;margin-bottom:18px;border:1px solid var(--line)}
+.result-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:16px 0}
+.rg .k{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.rg .v{font-size:1.02rem;font-weight:800;margin-top:3px}
+
+/* settings */
+.set-card{padding:24px;margin-bottom:16px}
+.set-card h4{font-size:.98rem;font-weight:800;margin-bottom:4px}
+.set-card p{font-size:.8rem;color:var(--muted);margin-bottom:16px}
+.set-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.tag-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.tag{background:#f1f4fb;border:1px solid var(--line);border-radius:20px;padding:5px 13px;font-size:.78rem;font-weight:700;display:flex;align-items:center;gap:7px}
+.tag button{border:none;background:none;cursor:pointer;color:#9aa6bd;font-size:.9rem;line-height:1}
+.tag button:hover{color:var(--danger)}
+.seg{display:inline-flex;background:#eef1f8;border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.seg button{border:none;background:none;padding:8px 16px;border-radius:9px;font-size:.8rem;font-weight:700;cursor:pointer;color:#54627e;font-family:inherit}
+.seg button.on{background:#fff;color:var(--primary);box-shadow:var(--shadow-sm)}
+
+/* Responsive */
+.backdrop{display:none}
+@media(max-width:1150px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.chart-grid,.two-col,.result-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:860px){
+  .app{grid-template-columns:1fr}
+  .sidebar{position:fixed;left:0;top:0;width:264px;transform:translateX(-100%);transition:.28s;box-shadow:0 0 60px rgba(0,0,0,.4)}
+  .sidebar.open{transform:none}
+  .backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:39}
+  .backdrop.show{display:block}
+  .topbar .menu-btn{display:grid;place-items:center}
+  .content{padding:18px 16px 50px}
+  .form-grid,.result-grid{grid-template-columns:1fr}
+  .pill .lbl{display:none}
+}
+@media(max-width:520px){.kpi-grid,.report-grid,.result-grid{grid-template-columns:1fr 1fr}}
+@media print{.sidebar,.topbar,.toolbar,.no-print{display:none!important}.app{grid-template-columns:1fr}.content{padding:0}}
+
+/* =================== NEUMORPHIC THEME (premium hybrid · soft UI) =================== */
+:root{
+  --bg:#e7ecf5; --card:#e7ecf5; --line:#d6dded;
+  --sh-d:#c3cbdb; --sh-l:#ffffff;
+  --nm:6px 6px 14px var(--sh-d), -6px -6px 14px var(--sh-l);
+  --nm-sm:4px 4px 9px var(--sh-d), -4px -4px 9px var(--sh-l);
+  --nm-lg:9px 9px 24px var(--sh-d), -9px -9px 24px var(--sh-l);
+  --nm-in:inset 4px 4px 8px var(--sh-d), inset -4px -4px 8px var(--sh-l);
+  --nm-in-sm:inset 2px 2px 5px var(--sh-d), inset -2px -2px 5px var(--sh-l);
+  --shadow:var(--nm); --shadow-sm:var(--nm-sm); --shadow-lg:var(--nm-lg);
+}
+body{background:var(--bg);line-height:1.2}
+body,.kpi .lbl,.section-head p,.csub,.sub,.act-body .d,.camp-card p,.portal-p,.login-card .lsub,.field label{line-height:1.2}
+
+/* Sidebar */
+.sidebar{background:var(--bg);border-right:none;box-shadow:8px 0 22px -16px var(--sh-d)}
+.brand{border-bottom:1px solid var(--line)}
+.brand h1{color:var(--ink)} .brand span{color:#8b95ab}
+.nav-label{color:#9aa3ba}
+.nav-item{color:#586581;background:transparent;box-shadow:none}
+.nav-item:hover{background:var(--bg);box-shadow:var(--nm-sm);color:var(--primary-dark)}
+.nav-item.active{background:var(--bg);box-shadow:var(--nm-in);color:var(--primary)}
+.nav-item.active::before{display:none}
+.sidebar-foot{border-top:1px solid var(--line);color:#8b95ab}
+.sidebar-foot b{color:var(--ink)}
+
+/* Topbar */
+.topbar{background:var(--bg);border-bottom:1px solid var(--line);backdrop-filter:none}
+.menu-btn{background:var(--bg);border:none;box-shadow:var(--nm-sm);color:#586581}
+.pill{background:var(--bg);border:none;box-shadow:var(--nm-sm);color:#56607a}
+.avatar{box-shadow:var(--nm-sm)}
+.ws-chip{box-shadow:var(--nm-sm)}
+.icon-btn{background:var(--bg);border:none;box-shadow:var(--nm-sm);color:#56607a}
+.icon-btn:hover{box-shadow:var(--nm-in-sm);color:var(--primary)}
+
+/* Cards & surfaces */
+.card,.kpi,.stat-tile,.camp-card,.chart-card,.set-card,.list-card,.activity,.result-card,.lookup,.table-card{background:var(--bg);border:none;box-shadow:var(--nm)}
+.kpi::before,.camp-card::before,.stat-tile::before{display:none}
+.kpi{padding-top:20px}
+.kpi:hover,.camp-card:hover{box-shadow:var(--nm-lg)}
+.kpi .ic{background:var(--bg);box-shadow:var(--nm-in)}
+.act-ic{box-shadow:var(--nm-in-sm)}
+.fychip{background:var(--bg);border:none;box-shadow:var(--nm-in-sm);color:#56607a}
+.camp-mini{border-top:1px solid var(--line)}
+
+/* Buttons */
+.btn-ghost{background:var(--bg);border:none;box-shadow:var(--nm-sm);color:#48526b}
+.btn-ghost:hover{background:var(--bg);box-shadow:var(--nm-in-sm)}
+.btn-primary{box-shadow:5px 5px 12px var(--sh-d), -5px -5px 12px var(--sh-l)}
+.btn-primary:hover{box-shadow:var(--nm)}
+.btn-primary:active,.btn-ghost:active,.btn-danger:active{box-shadow:var(--nm-in-sm)}
+.btn:active{transform:none}
+.btn-danger{background:var(--bg);box-shadow:var(--nm-sm)}
+.btn-danger:hover{background:var(--bg);box-shadow:var(--nm-in-sm)}
+.btn-success{background:var(--bg);box-shadow:var(--nm-sm)}
+
+/* Inputs (inset) */
+.input,.select,.field input,.field select,.field textarea{background:var(--bg);border:none;box-shadow:var(--nm-in-sm)}
+.input:focus,.select:focus,.field input:focus,.field select:focus,.field textarea:focus{background:var(--bg);box-shadow:var(--nm-in-sm), 0 0 0 3px var(--primary-soft)}
+.suggest{background:var(--bg);border:none;box-shadow:var(--nm)}
+.suggest div:hover{background:#dde4f1}
+
+/* Tables — kept crisp & legible inside a soft container */
+thead th{background:#dfe5f1;color:#5a647d;border-bottom:1px solid var(--line)}
+tbody td{border-bottom:1px solid #d9e0ed}
+tbody tr:hover td{background:#dde4f1}
+.cell-edit{background:transparent;border:1px solid transparent;box-shadow:none}
+.cell-edit:hover{background:var(--bg);box-shadow:var(--nm-in-sm);border:none}
+.cell-edit:focus{background:var(--bg);box-shadow:var(--nm-in-sm), 0 0 0 2px var(--primary-soft)}
+.token{background:var(--bg);box-shadow:var(--nm-in-sm)}
+.pg-btns button{background:var(--bg);border:none;box-shadow:var(--nm-sm);color:#56607a}
+.pg-btns button:hover:not(:disabled){box-shadow:var(--nm-in-sm);color:var(--primary)}
+.pg-btns button.active{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;box-shadow:var(--nm-in-sm)}
+
+/* Progress tracks (inset groove) */
+.util-bar,.bar-row .track{background:var(--bg);box-shadow:var(--nm-in-sm)}
+
+/* Segmented control */
+.seg{background:var(--bg);border:none;box-shadow:var(--nm-in)}
+.seg button.on{background:var(--bg);box-shadow:var(--nm-sm);color:var(--primary)}
+
+
+/* Claim received */
+.big-input{background:var(--bg);border:none;box-shadow:var(--nm-in)}
+.big-input:focus{box-shadow:var(--nm-in), 0 0 0 4px var(--primary-soft)}
+
+/* Modals (float on dark overlay → soft drop shadow + neumorphic fields) */
+.modal{background:var(--bg);box-shadow:0 30px 70px -18px rgba(20,30,70,.45)}
+.x{background:var(--bg);border:none;box-shadow:var(--nm-sm)}
+.x:hover{box-shadow:var(--nm-in-sm)}
+.calc-box{background:var(--bg);border:none;box-shadow:var(--nm-in)}
+
+/* Toast (raised on base) */
+.toast{background:var(--bg);box-shadow:var(--nm-lg)}
+
+/* Settings */
+.set-row{border-top:1px solid var(--line)}
+.tag{background:var(--bg);border:none;box-shadow:var(--nm-sm)}
+
+/* Login · Intro · Portal → light neumorphic */
+.login-screen{background:var(--bg)}
+.login-card{background:var(--bg);box-shadow:var(--nm-lg)}
+.login-card h2{color:var(--ink)}
+.login-brand h1{color:var(--ink)} .login-brand span{color:#8b95ab}
+.login-field label{color:#56607a}
+.login-field input{background:var(--bg);border:none;box-shadow:var(--nm-in-sm)}
+.login-field input:focus{background:var(--bg);box-shadow:var(--nm-in-sm), 0 0 0 3px var(--primary-soft)}
+.login-foot{color:#8b95ab}
+.intro-screen{background:var(--bg)}
+.intro-title{color:var(--ink)} .intro-sub{color:#7a85a3}
+.intro-skip{background:var(--bg);border:none;box-shadow:var(--nm-sm);color:#56607a}
+.intro-glow{background:radial-gradient(circle,rgba(110,91,246,.22),transparent 60%)}
+.portal-screen{background:var(--bg)}
+.portal-top .login-brand h1{color:var(--ink)} .portal-top .login-brand span{color:#8b95ab}
+.portal-user{color:#56607a}
+.portal-h{color:var(--ink)} .portal-p{color:var(--muted)}
+.portal-card{background:var(--bg);border:none;box-shadow:var(--nm)}
+.portal-card:hover{background:var(--bg);box-shadow:var(--nm-lg);border:none}
+.portal-card h2{color:var(--ink)} .portal-card p{color:var(--muted)}
+.pc-stat{background:var(--bg);border:none;box-shadow:var(--nm-in-sm);color:#56607a}
+.rec-code{font-family:ui-monospace,monospace;font-size:1.2rem;font-weight:800;letter-spacing:2px;color:var(--primary);background:var(--bg);box-shadow:var(--nm-in);border-radius:13px;padding:16px;text-align:center;word-break:break-all}
+.fy-select{background:var(--bg);border:none;box-shadow:var(--nm-in-sm);border-radius:30px;padding:8px 14px;font-weight:800;font-size:.74rem;color:var(--primary);font-family:inherit;cursor:pointer;outline:none}
+.fy-select:focus{box-shadow:var(--nm-in-sm),0 0 0 3px var(--primary-soft)}
+body.viewer .needs-edit{display:none!important}
+#roleChip{background:var(--bg);color:#9a6510;box-shadow:var(--nm-in-sm)}
+.usermenu{position:relative}
+.usermenu>.avatar{cursor:pointer;border:none;font-family:inherit}
+.usermenu-pop{position:absolute;right:0;top:calc(100% + 12px);background:var(--bg);border-radius:16px;box-shadow:var(--nm-lg);padding:8px;width:226px;display:none;z-index:60}
+.usermenu-pop.open{display:block;animation:fade .15s}
+.um-head{display:flex;gap:11px;align-items:center;padding:10px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.um-head #umName{font-weight:800;font-size:.9rem}
+.um-role{font-size:.72rem;color:var(--muted);text-transform:capitalize}
+.usermenu-pop button{display:flex;align-items:center;gap:11px;width:100%;background:none;border:none;padding:11px 12px;border-radius:11px;font-family:inherit;font-size:.84rem;font-weight:600;color:var(--text);cursor:pointer;text-align:left}
+.usermenu-pop button:hover{background:#eaeef7}
+.usermenu-pop button span{font-size:1rem;width:18px;text-align:center}
+.usermenu-pop .um-danger{color:#bb2f32}
+</style>
+</head>
+<body>
+<!-- LOGIN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-brand"><div class="logo">JBP</div><div><h1>JBP Tracker</h1><span>Vivo • Marketing</span></div></div>
+    <h2>Sign in</h2>
+    <div class="lsub">🔒 Confidential — authorised users only</div>
+    <div class="login-field"><label>Username</label><input id="loginUser" autocomplete="username" placeholder="e.g. SK" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="login-field"><label>Password</label><input id="loginPass" type="password" autocomplete="current-password" placeholder="••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="login-err" id="loginErr"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:13px" onclick="doLogin()">Sign in</button>
+    <div id="recoveryRow" style="display:none;margin-top:14px">
+      <div class="login-field"><label>Recovery key</label><input id="recoveryInput" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" onkeydown="if(event.key==='Enter')recoveryLogin()"></div>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="recoveryLogin()">🔑 Unlock with recovery key</button>
+    </div>
+    <div class="login-foot">Forgot your password? Ask an admin to reset it in Settings · <a onclick="toggleRecovery()" style="color:var(--primary);font-weight:700;cursor:pointer">Use recovery key</a></div>
+  </div>
+</div>
+
+<!-- INTRO ANIMATION -->
+<div class="intro-screen hide" id="introScreen">
+  <button class="intro-skip" onclick="endIntro()">Skip ›</button>
+  <div class="intro-stage">
+    <div class="intro-glow"></div>
+    <div class="intro-fold fold-l"></div>
+    <div class="intro-fold fold-r"></div>
+    <div class="intro-core">
+      <div class="intro-logo">JBP</div>
+      <div class="intro-title">Marketing Intelligence Suite</div>
+      <div class="intro-sub">Vivo India · Joint Brand Promotion</div>
+    </div>
+  </div>
+</div>
+
+<!-- PORTAL CHOOSER -->
+<div class="portal-screen hide" id="portalScreen">
+  <div class="portal-top">
+    <div class="login-brand"><div class="logo">JBP</div><div><h1>JBP Tracker</h1><span>Vivo • Marketing</span></div></div>
+    <div class="portal-user"><span id="portalWho">Signed in</span><button class="icon-btn" onclick="doLogout()">⎋ Logout</button></div>
+  </div>
+  <div class="portal-body">
+    <h1 class="portal-h">Choose a workspace</h1>
+    <p class="portal-p">Select which area you want to work in. Each keeps its own separate data.</p>
+    <div class="portal-cards">
+      <div class="portal-card pc-jbp" onclick="selectPortal('jbp')">
+        <div class="pc-ic">📊</div>
+        <h2>JBP</h2>
+        <p>Joint Brand Promotion — trade payments, claims, Vivo/State share &amp; recovery.</p>
+        <div class="pc-stat" id="pcJbp">—</div>
+        <div class="pc-go">Enter workspace →</div>
+      </div>
+      <div class="portal-card pc-vivo" onclick="selectPortal('vivo')">
+        <div class="pc-ic">🚀</div>
+        <h2>Vivo India Activities</h2>
+        <p>Pan-India marketing activities — the same tools, with its own fresh data.</p>
+        <div class="pc-stat" id="pcVivo">—</div>
+        <div class="pc-go">Enter workspace →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- YEAR CHOOSER -->
+<div class="portal-screen hide" id="yearScreen">
+  <div class="portal-top">
+    <div class="login-brand"><div class="logo">JBP</div><div><h1>JBP Tracker</h1><span id="yearWsLabel">Vivo • Marketing</span></div></div>
+    <div class="portal-user"><span id="yearWho">Signed in</span><button class="icon-btn" onclick="goHome()">↩ Portals</button></div>
+  </div>
+  <div class="portal-body">
+    <h1 class="portal-h">Select financial year</h1>
+    <p class="portal-p">Choose the year you want to view. You can switch anytime from the top bar.</p>
+    <div class="portal-cards" id="yearCards" style="max-width:1020px;grid-template-columns:repeat(3,1fr)"></div>
+  </div>
+</div>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="logo">JBP</div>
+      <div><h1>JBP Tracker</h1><span>Vivo • Marketing</span></div>
+    </div>
+    <div class="nav-label">Workspace</div>
+    <div class="nav-item active" data-view="dashboard" onclick="navTo('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg> Dashboard</div>
+    <div class="nav-item" data-view="campaigns" onclick="navTo('campaigns')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 11 18-5v12L3 13"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg> Campaign Management</div>
+    <div class="nav-item" data-view="payments" onclick="navTo('payments')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg> Payments &amp; Claims</div>
+    <div class="nav-item" data-view="claimtracker" onclick="navTo('claimtracker')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 14l2 2 4-4"/></svg> Claim Tracker</div>
+    <div class="nav-item" data-view="received" onclick="navTo('received')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg> Claim Received</div>
+    <div class="nav-item" data-view="tva" onclick="navTo('tva')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/></svg> Target vs Achievement</div>
+    <div class="nav-item" data-view="reports" onclick="navTo('reports')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></svg> Reports &amp; Analytics</div>
+    <div class="nav-item" data-view="settings" onclick="navTo('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</div>
+    <div class="sidebar-foot"><b>FY 2026-27</b><br>Joint Brand Promotion Suite</div>
+  </aside>
+  <div class="backdrop" id="backdrop" onclick="toggleSidebar(false)"></div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+      <div><h2 id="pageTitle">Executive Dashboard</h2><div class="sub" id="pageSub">CMO view of JBP spend, claims &amp; recovery</div></div>
+      <div class="spacer"></div>
+      <div class="ws-chip" id="wsChip">JBP</div>
+      <div class="ws-chip" id="roleChip" style="display:none">👁 View only</div>
+      <select id="fySelect" class="fy-select no-print" onchange="setFY(this.value)" title="Financial year"></select>
+      <div class="pill"><span class="dot"></span><span class="lbl">Autosaved</span></div>
+      <div class="usermenu no-print">
+        <button class="avatar" id="userAvatar" onclick="toggleUserMenu(event)" title="Account">VM</button>
+        <div class="usermenu-pop" id="userMenu">
+          <div class="um-head"><div class="avatar" id="umAvatar" style="cursor:default">VM</div><div><div id="umName">User</div><div class="um-role" id="umRole">role</div></div></div>
+          <button onclick="goHome();closeUserMenu()"><span>⌂</span> Switch workspace</button>
+          <button onclick="exportShareable();closeUserMenu()"><span>📤</span> Share file</button>
+          <button class="um-danger" onclick="doLogout();closeUserMenu()"><span>⎋</span> Logout</button>
+        </div>
+      </div>
+    </div>
+    <div class="content">
+
+      <!-- DASHBOARD -->
+      <section class="view active" id="view-dashboard">
+        <div class="kpi-grid" id="kpiGrid"></div>
+        <div class="chart-grid">
+          <div class="card chart-card"><h4>Payment Status</h4><div class="csub">Paid vs Pending across all entries (₹)</div><div class="chart-box"><canvas id="chartPayment"></canvas></div></div>
+          <div class="card chart-card"><h4>Claim Recovery Funnel</h4><div class="csub">Where your claimable money sits (₹)</div><div class="chart-box"><canvas id="chartClaim"></canvas></div></div>
+          <div class="card chart-card"><h4>Budget Utilization by Campaign</h4><div class="csub">Allocated budget vs amount paid (₹)</div><div class="chart-box"><canvas id="chartBudget"></canvas></div></div>
+          <div class="card chart-card"><h4>Claims Submitted vs Received</h4><div class="csub">Recovery gap by campaign (₹)</div><div class="chart-box"><canvas id="chartRecovery"></canvas></div></div>
+        </div>
+        <div class="card chart-card" style="margin-bottom:24px"><h4>Vivo India vs State Share by Campaign</h4><div class="csub">Co-funding split of campaign spend (₹)</div><div class="chart-box"><canvas id="chartShare"></canvas></div></div>
+        <div class="chart-grid">
+          <div class="card chart-card"><h4>Monthly Spend &amp; Recovery Trend</h4><div class="csub">Paid out vs claim money received, by month</div><div class="chart-box"><canvas id="chartTrend"></canvas></div></div>
+          <div class="card chart-card"><h4>Year-over-Year Comparison</h4><div class="csub">Budget · Paid · Claimed · Received across financial years</div><div class="chart-box"><canvas id="chartYoY"></canvas></div></div>
+        </div>
+        <div class="card activity">
+          <div class="section-head" style="margin:0 0 8px"><h3>Recent Activity</h3><p>Latest changes across the workspace</p></div>
+          <ul id="activityList"></ul>
+        </div>
+      </section>
+
+      <!-- CAMPAIGNS -->
+      <section class="view" id="view-campaigns">
+        <div class="section-head"><div><h3>Campaign Management</h3><p>Create and manage unlimited JBP campaigns</p></div>
+          <button class="btn btn-primary needs-edit" onclick="openCampaignModal()">+ Add Campaign</button></div>
+        <div class="toolbar">
+          <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
+            <input class="input" id="campSearch" placeholder="Search campaigns…" oninput="renderCampaigns()"></div>
+          <select class="select" id="campStatusFilter" onchange="renderCampaigns()"><option value="">All Statuses</option><option>Active</option><option>Completed</option><option>Draft</option><option>Closed</option></select>
+        </div>
+        <div class="camp-grid" id="campGrid"></div>
+      </section>
+
+      <!-- CAMPAIGN DETAIL -->
+      <section class="view" id="view-campaign-detail">
+        <div class="crumb"><a onclick="navTo('campaigns')">Campaigns</a> › <span id="cdName">Campaign</span></div>
+        <div class="detail-head">
+          <div><h2 id="cdTitle">Campaign</h2><div class="sub" id="cdMeta"></div></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-ghost needs-edit" id="cdEditBtn">✏ Edit Campaign</button>
+            <button class="btn btn-primary needs-edit" id="cdAddEntryBtn">+ Add Entry</button></div>
+        </div>
+        <div class="report-grid" id="cdStats"></div>
+        <div class="chart-grid">
+          <div class="card chart-card"><h4>Budget Utilization</h4><div class="csub">Paid vs Pending vs Remaining</div><div class="chart-box"><canvas id="cdChartBudget"></canvas></div></div>
+          <div class="card chart-card"><h4>Trade Partner Spend</h4><div class="csub">Amount by trade partner (₹)</div><div class="chart-box"><canvas id="cdChartVendor"></canvas></div></div>
+        </div>
+        <div class="section-head" style="margin-top:8px"><h3>Payment Tracker</h3><p>All payment entries for this campaign — edit inline</p></div>
+        <div class="card table-card"><div class="table-scroll"><table id="cdTable"></table></div></div>
+      </section>
+
+      <!-- PAYMENTS & CLAIMS -->
+      <section class="view" id="view-payments">
+        <!-- campaign cards -->
+        <div id="payCardsView">
+          <div class="section-head"><div><h3>Payments &amp; Claims</h3><p>Pick a campaign to open its payments &amp; claims ledger</p></div>
+            <button class="btn btn-primary needs-edit" onclick="openEntryModal()">+ Add Entry</button></div>
+          <div class="toolbar">
+            <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
+              <input class="input" id="payCampSearch" placeholder="Search campaigns…" oninput="renderPayments()"></div></div>
+          <div class="camp-grid" id="payCampGrid"></div>
+        </div>
+        <!-- ledger drill-down -->
+        <div id="payLedgerView" style="display:none">
+          <div class="crumb"><a onclick="payBackToCards()">Payments &amp; Claims</a> › <span id="payLedgerName">Campaign</span></div>
+          <div class="section-head"><div><h3 id="payLedgerHead">Campaign</h3><p>Operational ledger — single-click inline editing, autosaved</p></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" onclick="exportData('csv')">⬇ CSV</button>
+              <button class="btn btn-ghost btn-sm" onclick="exportData('excel')">⬇ Excel</button>
+              <button class="btn btn-ghost btn-sm" onclick="exportData('pdf')">⬇ PDF</button>
+              <button class="btn btn-primary needs-edit" onclick="openEntryModal(null,payCampaign)">+ Add Entry</button></div></div>
+          <div class="toolbar">
+            <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
+              <input class="input" id="paySearch" placeholder="Search trade partner, activity, invoice, remarks…" oninput="onSearchInput()" autocomplete="off">
+              <div class="suggest" id="paySuggest"></div></div>
+            <select class="select" id="fPartner" onchange="resetPage();renderPayments()"></select>
+            <select class="select" id="fPayStatus" onchange="resetPage();renderPayments()"><option value="">All Payments</option><option>Paid</option><option>Pending</option></select>
+            <select class="select" id="fClaimStatus" onchange="resetPage();renderPayments()"><option value="">All Claims</option><option>Submitted</option><option>Not Submitted</option><option>Not Required</option></select>
+            <input class="input" type="date" id="fDateFrom" title="From date" onchange="resetPage();renderPayments()">
+            <input class="input" type="date" id="fDateTo" title="To date" onchange="resetPage();renderPayments()">
+            <button class="btn btn-ghost btn-sm" onclick="clearFilters()">Clear</button></div>
+          <div class="card table-card"><div class="table-scroll"><table id="payTable" class="wide"></table></div>
+            <div class="pagination"><div class="pginfo" id="payPgInfo"></div><div style="display:flex;align-items:center;gap:10px"><select class="select" id="payPerPage" onchange="setPerPage(this.value)" style="padding:6px 11px;font-size:.78rem"><option value="10">10 / page</option><option value="25">25 / page</option><option value="50">50 / page</option><option value="100">100 / page</option></select><div class="pg-btns" id="payPgBtns"></div></div></div></div>
+        </div>
+      </section>
+
+      <!-- CLAIM TRACKER -->
+      <section class="view" id="view-claimtracker">
+        <div id="ctCardsView">
+          <div class="section-head"><div><h3>Claim Tracker</h3><p>Pick a box to view its claim status by financial year</p></div></div>
+          <div class="toolbar">
+            <select class="select" id="ctFy" onchange="renderClaimTracker()"></select>
+            <div class="seg"><button id="ctModeCamp" class="on" onclick="setCtMode('campaign')">Campaign-wise</button><button id="ctModeTrade" onclick="setCtMode('trade')">Trade-wise</button></div>
+            <div class="spacer" style="flex:1"></div>
+            <button class="btn btn-ghost btn-sm" onclick="exportClaimTracker('excel')">⬇ Excel</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportClaimTracker('pdf')">⬇ PDF</button>
+          </div>
+          <div class="report-grid" id="ctSummary"></div>
+          <div class="camp-grid" id="ctCardGrid"></div>
+        </div>
+        <div id="ctDrillView" style="display:none">
+          <div class="crumb"><a onclick="ctBack()">Claim Tracker</a> › <span id="ctDrillName">—</span></div>
+          <div class="section-head"><div><h3 id="ctDrillHead">—</h3><p>Claim line items</p></div></div>
+          <div class="report-grid" id="ctDrillSummary"></div>
+          <div class="card table-card"><div class="table-scroll"><table id="ctDrillTable" class="wide"></table></div></div>
+        </div>
+      </section>
+
+      <!-- CLAIM RECEIVED -->
+      <section class="view" id="view-received">
+        <div class="section-head"><div><h3>Claim Received Status</h3><p>Enter a claim's 4-digit code to update what's been received</p></div><button class="btn btn-ghost btn-sm needs-edit" onclick="openBulkReceived()">⚡ Bulk mark received</button></div>
+        <div class="card lookup">
+          <div class="field" style="gap:8px"><label>Claim Code</label>
+            <input class="big-input" id="tokenLookup" maxlength="4" inputmode="numeric" placeholder="0000" oninput="this.value=this.value.replace(/[^0-9]/g,'')" onkeydown="if(event.key==='Enter')lookupClaim()"></div>
+          <button class="btn btn-primary" onclick="lookupClaim()">🔍 Find Claim</button>
+          <div style="font-size:.78rem;color:var(--muted);align-self:center;max-width:320px">Every claim marked <b>Submitted</b> gets a unique 4-digit code. Find it in the <a onclick="navTo('claimtracker')" style="color:var(--primary);cursor:pointer;font-weight:700">Claim Tracker</a>.</div>
+        </div>
+        <div id="lookupResult"></div>
+        <div id="recCardsView">
+          <div class="section-head" style="margin-top:10px"><div><h3>Submitted Claims by Campaign</h3><p>Pick a campaign to update its received amounts</p></div></div>
+          <div class="camp-grid" id="recCampGrid"></div>
+        </div>
+        <div id="recDrillView" style="display:none">
+          <div class="crumb"><a onclick="recBack()">Submitted Claims</a> › <span id="recDrillName">—</span></div>
+          <div class="section-head" style="margin-top:10px"><div><h3 id="recDrillHead">—</h3><p>Update received amount &amp; status inline — reflects on the dashboard</p></div></div>
+          <div class="card table-card"><div class="table-scroll"><table id="recTable" class="wide"></table></div></div>
+        </div>
+      </section>
+
+      <!-- TARGET VS ACHIEVEMENT -->
+      <section class="view" id="view-tva">
+        <div id="tvaModelsView">
+          <div class="section-head"><div><h3>Target vs Achievement</h3><p>Model-wise super-month targets &amp; achievement — pick a model</p></div>
+            <button class="btn btn-primary needs-edit" onclick="openTvaModelModal()">+ Add Model</button></div>
+          <div class="report-grid" id="tvaSummary"></div>
+          <div class="camp-grid" id="tvaModelGrid"></div>
+        </div>
+        <div id="tvaTradesView" style="display:none">
+          <div class="crumb"><a onclick="tvaBack()">Target vs Achievement</a> › <span id="tvaModelName">—</span></div>
+          <div class="section-head"><div><h3 id="tvaModelHead">—</h3><p>Trade-wise target &amp; achievement — click a trade to edit</p></div>
+            <button class="btn btn-primary needs-edit" onclick="openTvaModal()">+ Add Trade Target</button></div>
+          <div class="report-grid" id="tvaModelSummary"></div>
+          <div class="camp-grid" id="tvaTradeGrid"></div>
+        </div>
+      </section>
+
+      <!-- REPORTS -->
+      <section class="view" id="view-reports">
+        <div id="rpCardsView">
+          <div class="section-head"><div><h3>Reports &amp; Analytics</h3><p>Pick a campaign to open its full financial, claim &amp; recovery report</p></div></div>
+          <div class="camp-grid" id="rpCampGrid"></div>
+        </div>
+        <div id="rpDrillView" style="display:none">
+          <div class="crumb"><a onclick="rpBack()">Reports &amp; Analytics</a> › <span id="rpDrillName">—</span></div>
+          <div class="section-head"><div><h3 id="rpDrillHead">—</h3><p>Campaign report</p></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" onclick="exportReport('excel')">⬇ Excel</button>
+              <button class="btn btn-ghost btn-sm" onclick="exportReport('pdf')">⬇ PDF</button>
+              <button class="btn btn-ghost btn-sm no-print" onclick="window.print()">🖨 Print</button></div></div>
+          <div id="reportBody"></div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="view" id="view-settings">
+        <div class="section-head"><div><h3>Settings</h3><p>Master data &amp; workspace configuration</p></div></div>
+        <div class="card set-card"><h4>Financial Years</h4><p>Used in campaigns &amp; the Claim Tracker dropdown.</p>
+          <div class="tag-list" id="fyTags"></div>
+          <div class="needs-edit" style="display:flex;gap:10px;margin-top:14px"><input class="input" id="newFy" placeholder="e.g. FY 2027-28" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addMaster('fyList','newFy')">Add</button></div></div>
+        <div class="card set-card"><h4>Trade Partners</h4><p>Master list used in the entry dropdowns.</p>
+          <div class="tag-list" id="partnerTags"></div>
+          <div class="needs-edit" style="display:flex;gap:10px;margin-top:14px"><input class="input" id="newPartner" placeholder="Add trade partner…" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addMaster('partners','newPartner')">Add</button></div></div>
+        <div class="card set-card"><h4>Activity Types</h4><p>Common JBP activity names for faster entry.</p>
+          <div class="tag-list" id="activityTags"></div>
+          <div class="needs-edit" style="display:flex;gap:10px;margin-top:14px"><input class="input" id="newActivity" placeholder="Add activity type…" style="flex:1"><button class="btn btn-primary btn-sm" onclick="addMaster('activities','newActivity')">Add</button></div></div>
+        <div class="card set-card"><h4>User Management</h4><p id="umNote">Manage who can sign in and reset passwords.</p>
+          <div id="userList"></div>
+          <div id="addUserBox"></div></div>
+        <div class="card set-card"><h4>Data Management</h4><p>Share with managers, back up, or reset your workspace.</p>
+          <div class="set-row needs-edit" id="cloudSetupRow"><div><b style="font-size:.86rem;color:var(--primary)">☁ Move data to the cloud (one-time)</b><div style="font-size:.78rem;color:var(--muted)">Turn on encrypted cloud sync — access your data from any device</div></div><button class="btn btn-primary btn-sm" onclick="openCloudSetup()">Set up cloud</button></div>
+          <div class="set-row" id="cloudStatusRow" style="display:none"><div><b style="font-size:.86rem;color:#0a7d4e">☁ Cloud sync is ON</b><div style="font-size:.78rem;color:var(--muted)">Your data is encrypted and synced across devices</div></div><span class="badge received">Synced</span></div>
+          <div class="set-row"><div><b style="font-size:.86rem;color:var(--primary)">📤 Export shareable file (for managers)</b><div style="font-size:.78rem;color:var(--muted)">Standalone .html with your data baked in — recipients just double-click to view</div></div><button class="btn btn-primary btn-sm" onclick="exportShareable()">Export Share File</button></div>
+          <div class="set-row"><div><b style="font-size:.86rem">Export encrypted backup</b><div style="font-size:.78rem;color:var(--muted)">Secure vault file (.json) — needs a password to open</div></div><button class="btn btn-ghost btn-sm" onclick="exportBackup()">Download Vault</button></div>
+          <div class="set-row needs-edit"><div><b style="font-size:.86rem;color:#b45309">⚠ Export readable data (unencrypted)</b><div style="font-size:.78rem;color:var(--muted)">Plain JSON for safekeeping — anyone can read it, store securely</div></div><button class="btn btn-ghost btn-sm" onclick="exportPlaintext()">Download readable JSON</button></div>
+          <div class="set-row needs-edit"><div><b style="font-size:.86rem">Restore from backup</b><div style="font-size:.78rem;color:var(--muted)">Import a previously exported JSON file</div></div><label class="btn btn-ghost btn-sm" style="cursor:pointer">Import JSON<input type="file" accept="application/json" style="display:none" onchange="importBackup(this)"></label></div>
+          <div class="set-row needs-edit"><div><b style="font-size:.86rem;color:#bb2f32">Reset workspace</b><div style="font-size:.78rem;color:var(--muted)">Clears all data — start blank</div></div><button class="btn btn-danger btn-sm" onclick="resetWorkspace()">Reset</button></div></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="overlay" id="campaignModal"><div class="modal">
+  <div class="modal-head"><div><h3 id="campModalTitle">Add Campaign</h3><p>Define a new Joint Brand Promotion campaign</p></div><button class="x" onclick="closeOverlay('campaignModal')">✕</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="field full"><label>Campaign Name *</label><input id="cName" placeholder="e.g. X300 Launch Campaign"></div>
+    <div class="field"><label>Campaign Code</label><input id="cCode" placeholder="e.g. JBP-X300"></div>
+    <div class="field"><label>Financial Year</label><select id="cFy"></select></div>
+    <div class="field"><label>Campaign Type</label><select id="cType"><option>Product Launch</option><option>Retail Activation</option><option>Influencer</option><option>Brand Visibility</option><option>Seasonal / Festive</option><option>Other</option></select></div>
+    <div class="field"><label>Budget (₹)</label><input id="cBudget" type="number" min="0" step="1" placeholder="e.g. 8000000" oninput="updateCampCalc()"></div>
+    <div class="field"><label>Status</label><select id="cStatus"><option>Active</option><option>Draft</option><option>Completed</option><option>Closed</option></select></div>
+    <div class="field" id="cClaimPctField"><label>Claim % of Amount</label><input id="cClaimPct" type="number" min="0" max="100" step="1" value="100" oninput="updateCampCalc()"></div>
+    <div class="field" id="cVivoPctField"><label>Vivo India Share %</label><input id="cVivoPct" type="number" min="0" max="100" step="1" value="50" oninput="updateCampCalc()"></div>
+    <div class="field full" id="cCalcBoxField"><div class="calc-box" id="cCalcBox"></div><div style="font-size:.72rem;color:var(--muted);margin-top:6px">Projected from budget — pre-fills the Claim % &amp; Vivo India Share % of every new entry in this campaign.</div></div>
+    <div class="field"><label>Start Date</label><input id="cStart" type="date"></div>
+    <div class="field"><label>End Date</label><input id="cEnd" type="date"></div>
+    <div class="field full"><label>Description</label><textarea id="cDesc" rows="2" placeholder="Short description / objective"></textarea></div>
+  </div></div>
+  <div class="modal-foot"><button class="btn btn-ghost" onclick="closeOverlay('campaignModal')">Cancel</button><button class="btn btn-primary" onclick="saveCampaign()">Save Campaign</button></div>
+</div></div>
+
+<div class="overlay" id="entryModal"><div class="modal">
+  <div class="modal-head"><div><h3 id="entryModalTitle">Add Entry</h3><p>Record a trade-partner payment &amp; claim line item</p></div><button class="x" onclick="closeOverlay('entryModal')">✕</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="field full"><label>Campaign *</label><select id="eCampaign" onchange="onEntryCampaignChange()"></select></div>
+    <div class="field"><label>Trade Partner *</label><select id="ePartner"></select></div>
+    <div class="field"><label>Activity Name</label><input id="eActivity" placeholder="e.g. Store Launch" list="activityDatalist"></div>
+    <div class="field"><label>Invoice Number</label><input id="eInvoice" placeholder="e.g. INV-2026-0142"></div>
+    <div class="field"><label>Amount (₹) *</label><input id="eAmount" type="number" min="0" step="1" placeholder="e.g. 200000" oninput="updateEntryCalc()"></div>
+    <div class="field"><label>Payment Status</label><select id="ePayStatus"><option>Pending</option><option>Paid</option></select></div>
+    <div class="field"><label>Claim % of Amount</label><input id="eClaimPct" type="number" min="0" max="100" step="1" value="100" oninput="updateEntryCalc()"></div>
+    <div class="field"><label>Vivo India Share %</label><input id="eVivoPct" type="number" min="0" max="100" step="1" value="50" oninput="updateEntryCalc()"></div>
+    <div class="field full"><div class="calc-box" id="calcBox"></div></div>
+    <div class="field"><label>Payment Date</label><input id="ePayDate" type="date"></div>
+    <div class="field"><label>Claim Status</label><select id="eClaimStatus" onchange="updateEntryCalc()"><option>Not Submitted</option><option>Submitted</option><option>Not Required</option></select></div>
+    <div class="field"><label>Claim Submission Date</label><input id="eClaimDate" type="date"></div>
+    <div class="field"><label>Claim Reference No.</label><input id="eClaimRef" placeholder="e.g. CLM-88231"></div>
+    <div class="field full"><label>Remarks</label><textarea id="eRemarks" rows="2" placeholder="Optional notes"></textarea></div>
+  </div></div>
+  <div class="modal-foot"><button class="btn btn-ghost" onclick="closeOverlay('entryModal')">Cancel</button><button class="btn btn-primary" onclick="saveEntry()">Save Entry</button></div>
+</div></div>
+
+<div class="overlay" id="recoveryModal"><div class="modal sm">
+  <div class="modal-head"><div><h3>🔑 Save your recovery key</h3><p>This is shown <b>once</b>. It is the only way to recover the data if every password is forgotten.</p></div></div>
+  <div class="modal-body">
+    <div class="rec-code" id="recoveryCode">----</div>
+    <button class="btn btn-ghost btn-sm" onclick="copyRecovery()" style="margin-top:12px">📋 Copy key</button>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:14px;line-height:1.4">Store it in a password manager or a sealed note. Anyone with this key can unlock the data, so keep it safe. Your user passwords are <b>1234</b> until you change them in Settings → User Management.</p>
+  </div>
+  <div class="modal-foot"><button class="btn btn-primary" onclick="finishSetup()">I have saved it — continue</button></div>
+</div></div>
+
+<div class="overlay" id="confirmModal"><div class="modal sm">
+  <div class="modal-head"><div><h3 id="confirmTitle">Are you sure?</h3><p id="confirmMsg">This action cannot be undone.</p></div></div>
+  <div class="modal-foot"><button class="btn btn-ghost" onclick="closeOverlay('confirmModal')">Cancel</button><button class="btn btn-danger" id="confirmOk">Delete</button></div>
+</div></div>
+
+<div class="overlay" id="tvaModelModal"><div class="modal sm">
+  <div class="modal-head"><div><h3>Add Model</h3><p>Add a model to track super-month targets for</p></div><button class="x" onclick="closeOverlay('tvaModelModal')">✕</button></div>
+  <div class="modal-body"><div class="field"><label>Model name *</label><input id="tvModelName" placeholder="e.g. V70 FE"></div></div>
+  <div class="modal-foot"><button class="btn btn-ghost" onclick="closeOverlay('tvaModelModal')">Cancel</button><button class="btn btn-primary" onclick="saveTvaModel()">Add Model</button></div>
+</div></div>
+
+<div class="overlay" id="tvaModal"><div class="modal sm">
+  <div class="modal-head"><div><h3 id="tvaModalTitle">Add Trade Target</h3><p id="tvaModalSub">—</p></div><button class="x" onclick="closeOverlay('tvaModal')">✕</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="field full"><label>Trade Partner *</label><input id="tvTrade" list="tvaTradeList" placeholder="e.g. Poorvika" oninput="updateTvaCalc()"></div>
+    <div class="field"><label>Super-Month Target</label><input id="tvTarget" type="number" min="0" step="1" placeholder="e.g. 500" oninput="updateTvaCalc()"></div>
+    <div class="field"><label>Achieved</label><input id="tvAchieved" type="number" min="0" step="1" placeholder="e.g. 420" oninput="updateTvaCalc()"></div>
+    <div class="field full"><div class="calc-box" id="tvaCalc"></div></div>
+  </div></div>
+  <div class="modal-foot"><button class="btn btn-danger" id="tvaDeleteBtn" style="margin-right:auto;display:none" onclick="deleteTva()">Delete</button><button class="btn btn-ghost" onclick="closeOverlay('tvaModal')">Cancel</button><button class="btn btn-primary" onclick="saveTva()">Save</button></div>
+</div></div>
+<div class="overlay" id="bulkReceivedModal"><div class="modal">
+  <div class="modal-head"><div><h3>⚡ Bulk mark claims received</h3><p>Mark all claims in the chosen campaigns as fully received</p></div><button class="x" onclick="closeOverlay('bulkReceivedModal')">✕</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="field full"><label>Financial Year</label><select id="bulkFy" onchange="renderBulkCampList()"></select></div>
+    <div class="field full"><label>Campaigns to update — untick any to exclude (e.g. V70)</label><div id="bulkCampList" style="display:flex;flex-direction:column;gap:9px;max-height:230px;overflow:auto;padding:6px 2px"></div></div>
+    <div class="field full"><div class="calc-box" id="bulkSummary"></div></div>
+  </div>
+  <p style="font-size:.75rem;color:var(--muted);margin-top:12px;line-height:1.5">Sets Claim Status → <b>Submitted</b> (if not already) and Received → <b>Fully Received</b> with the full Vivo India claim amount. <b>"Not Required"</b> claims are skipped, and <b>dates are left unchanged</b>. You can Undo straight after.</p>
+  </div>
+  <div class="modal-foot"><button class="btn btn-ghost" onclick="closeOverlay('bulkReceivedModal')">Cancel</button><button class="btn btn-primary" id="bulkApplyBtn" onclick="applyBulkReceived()">Mark received</button></div>
+</div></div>
+<div class="overlay" id="cloudSetupModal"><div class="modal">
+  <div class="modal-head"><div><h3>☁ Move your data to the cloud</h3><p>One-time setup — creates your 3 cloud accounts &amp; uploads your data, encrypted</p></div><button class="x" onclick="closeOverlay('cloudSetupModal')">✕</button></div>
+  <div class="modal-body">
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:14px">Set a password for each person (at least <b>6 characters</b>). The same password logs them in <b>and</b> unlocks the data. Passwords are set on your device — I never see them.</p>
+    <div class="form-grid">
+      <div class="field full"><label>LEE password (admin — full edit)</label><input id="csLee" type="password" placeholder="at least 6 characters"></div>
+      <div class="field full"><label>SK password (view-only)</label><input id="csSk" type="password" placeholder="at least 6 characters"></div>
+      <div class="field full"><label>Ramya password (view-only)</label><input id="csRamya" type="password" placeholder="at least 6 characters"></div>
+    </div>
+    <div id="csStatus" style="font-size:.8rem;color:var(--primary);font-weight:700;margin-top:12px;min-height:18px"></div>
+    <p style="font-size:.74rem;color:var(--muted);margin-top:6px;line-height:1.5">Your existing data stays safe on this device too — this only <b>copies</b> it up. After it's done, sign in with these passwords from any device.</p>
+  </div>
+  <div class="modal-foot"><button class="btn btn-ghost" onclick="closeOverlay('cloudSetupModal')">Cancel</button><button class="btn btn-primary" id="csApplyBtn" onclick="runCloudSetup()">Set up cloud</button></div>
+</div></div>
+<datalist id="tvaTradeList"></datalist>
+<datalist id="activityDatalist"></datalist>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* ===================== JBP Tracker ===================== */
+let EMBEDDED_DATA = null; /*__EMBED__*/
+const APPKEY = 'jbpTracker_vault_v1';
+function appStoreKey(){ return EMBEDDED_DATA ? 'jbpTracker_snap_'+EMBEDDED_DATA.id : APPKEY; }
+const fmtL = n => {
+  n=Number(n)||0; const cr=1e7,l=1e5; const t=x=>(Math.round(x*100)/100).toString();
+  if(Math.abs(n)>=cr) return '₹'+t(n/cr)+' Cr';
+  if(Math.abs(n)>=l)  return '₹'+t(n/l)+' L';
+  if(Math.abs(n)>=1000) return '₹'+t(n/1000)+' K';
+  return '₹'+Math.round(n).toLocaleString('en-IN');
+};
+const pct = (a,b) => b>0 ? Math.round((a/b)*100) : 0;
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const todayISO = () => new Date().toISOString().slice(0,10);
+const DEFAULT_FY='FY 2026-27';
+function defaultUsers(){return [{u:'LEE',role:'admin'},{u:'SK',role:'viewer'},{u:'Ramya',role:'viewer'}];}
+function canEdit(){return !!(currentUser&&currentUser.role==='admin');}
+
+function genTokenFrom(used){let t,g=0;do{t=String(Math.floor(1000+Math.random()*9000));g++;}while(used.has(t)&&g<20000);used.add(t);return t;}
+function genToken(){const used=new Set(DB.entries.map(e=>e.claimToken).filter(Boolean));return genTokenFrom(used);}
+function r2(n){return Math.round((Number(n)||0)*100)/100;}
+/* Vivo India / State share split — Vivo India share IS the claim raised to Vivo */
+function recomputeShares(e){
+  const amt=+e.amount||0;
+  if(e.claimStatus==='Not Required'){ e.vivoAmount=0; e.stateAmount=r2(amt); e.claimAmount=0; e.statePct=100; return e; }
+  let cp=(e.claimPct===''||e.claimPct==null)?100:+e.claimPct; if(isNaN(cp))cp=100; cp=Math.max(0,Math.min(100,cp));
+  let vp=(e.vivoPct===''||e.vivoPct==null)?50:+e.vivoPct; if(isNaN(vp))vp=50; vp=Math.max(0,Math.min(100,vp));
+  e.claimPct=cp; e.vivoPct=vp; e.statePct=100-vp;
+  const claimable=r2(amt*cp/100);
+  e.vivoAmount=r2(claimable*vp/100);
+  e.stateAmount=r2(claimable-e.vivoAmount);
+  e.claimAmount=e.vivoAmount;
+  return e;
+}
+
+const TRADE_PARTNERS=['Poorvika','The Chennai Mobiles','Sathya Agencies','Darling','Supreme Mobiles','Vasanth & CO','Reliance Digital','Croma','Sangeetha Gadgets'];
+function seed(){
+  return {campaigns:[],entries:[],
+    partners:TRADE_PARTNERS.slice(),tpV1:true,
+    activities:['Launch Event','Store Launch','Marketing Campaign','Store Branding','Influencer – Shoutout','Influencer – Trendloud','IT Park Campaign'],
+    fyList:['FY 2025-26','FY 2026-27','FY 2027-28'],
+    activity:[{id:uid(),type:'campaign',msg:'Workspace ready — add your first campaign to begin',ts:Date.now()}]};
+}
+function normalize(db){
+  db.partners=db.partners||[]; db.activities=db.activities||[]; db.activity=db.activity||[];
+  if(!db.tpV1){db.partners=TRADE_PARTNERS.slice();db.tpV1=true;}
+  db.fyList=db.fyList&&db.fyList.length?db.fyList:['FY 2025-26','FY 2026-27','FY 2027-28'];
+  db.tvaModels=db.tvaModels||[]; db.tvaTrades=db.tvaTrades||[]; db.tva=db.tva||[];
+  (db.campaigns||[]).forEach(c=>{ if(!c.fy)c.fy=DEFAULT_FY; });
+  const used=new Set((db.entries||[]).map(e=>e.claimToken).filter(Boolean));
+  (db.entries||[]).forEach(e=>{
+    if(e.receivedStatus===undefined)e.receivedStatus='Not Received';
+    if(e.receivedAmount===undefined)e.receivedAmount=0;
+    if(e.receivedDate===undefined)e.receivedDate='';
+    if(!e.claimToken && e.claimStatus==='Submitted')e.claimToken=genTokenFrom(used);
+    if(e.claimToken===undefined)e.claimToken='';
+    // Vivo / State share back-fill (preserve existing claim amounts)
+    if(e.claimPct===undefined)e.claimPct=100;
+    const amt=+e.amount||0, claimable=amt*(e.claimPct/100);
+    if(e.vivoPct===undefined){const ca=+e.claimAmount||0; e.vivoPct=claimable>0?Math.max(0,Math.min(100,Math.round(ca/claimable*100))):50;}
+    if(e.vivoAmount===undefined){
+      e.vivoAmount=(e.claimAmount!=null)? r2(e.claimAmount) : r2(claimable*e.vivoPct/100);
+      e.stateAmount=r2(Math.max(0,claimable-e.vivoAmount));
+    }
+    if(e.statePct===undefined)e.statePct=100-(+e.vivoPct||0);
+  });
+  return db;
+}
+/* ===== Encryption (AES-GCM + PBKDF2) — real encrypted vault ===== */
+const _enc=new TextEncoder(),_dec=new TextDecoder();
+const b64=b=>btoa(String.fromCharCode.apply(null,new Uint8Array(b)));
+const ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const KDF_ITER=310000, KDF_ITER_LEGACY=200000;
+function cryptoOK(){return !!(window.crypto&&window.crypto.subtle);}
+async function deriveWK(password,saltBytes,iter){const base=await crypto.subtle.importKey('raw',_enc.encode(password),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:saltBytes,iterations:iter||KDF_ITER,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
+async function wrapSecret(dekRaw,password){const salt=crypto.getRandomValues(new Uint8Array(16));const wk=await deriveWK(password,salt,KDF_ITER);const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},wk,dekRaw);return {salt:b64(salt),iv:b64(iv),wrapped:b64(ct),iter:KDF_ITER};}
+async function unwrapSecret(entry,password){const wk=await deriveWK(password,ub64(entry.salt),entry.iter||KDF_ITER_LEGACY);const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:ub64(entry.iv)},wk,ub64(entry.wrapped));return new Uint8Array(raw);}
+async function importDEK(raw){return crypto.subtle.importKey('raw',raw,{name:'AES-GCM',length:256},true,['encrypt','decrypt']);}
+async function encData(dek,obj){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},dek,_enc.encode(JSON.stringify(obj)));return {iv:b64(iv),ct:b64(ct)};}
+async function decData(dek,blob){const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:ub64(blob.iv)},dek,ub64(blob.ct));return JSON.parse(_dec.decode(pt));}
+function genRecoveryCode(){const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const r=crypto.getRandomValues(new Uint8Array(20));let s='';for(let i=0;i<20;i++){s+=a[r[i]%a.length];if(i%4===3&&i<19)s+='-';}return s;}
+
+function defaultStore(){return {auth:{users:defaultUsers()},ws:{jbp:seed(),vivo:seed()}};}
+function normalizeStore(s){s=s||{};s.auth=s.auth||{};if(!s.auth.users||!s.auth.users.length)s.auth.users=defaultUsers();s.ws=s.ws||{};s.ws.jbp=normalize(s.ws.jbp||seed());s.ws.vivo=normalize(s.ws.vivo||seed());
+  /* Vivo India Activities only: HO is a valid trade partner (one-time add, respects later removal) */
+  ensureVivoHO(s.ws.vivo);
+  return s;}
+/* migrate any legacy plaintext install so its data becomes encrypted */
+function loadPlaintext(){
+  try{const raw=localStorage.getItem('jbpTracker_app_v3'); if(raw){const d=JSON.parse(raw); if(d&&d.ws) return normalizeStore(d);}}catch(e){}
+  try{const old=localStorage.getItem('jbpTracker_v2'); if(old){const od=JSON.parse(old); if(od&&od.campaigns) return normalizeStore({auth:{users:(od.users&&od.users.length)?od.users:defaultUsers()},ws:{jbp:od,vivo:seed()}});}}catch(e){}
+  return null;
+}
+function loadVault(){
+  try{const raw=localStorage.getItem(appStoreKey()); if(raw){const d=JSON.parse(raw); if(d&&d.users&&d.data) return d;}}catch(e){}
+  if(EMBEDDED_DATA&&EMBEDDED_DATA.vault) return EMBEDDED_DATA.vault;
+  return null;
+}
+let VAULT=loadVault();
+/* one-time role setup: LEE = owner/admin, everyone else view-only */
+if(VAULT&&!VAULT.roleOwner){(VAULT.users||[]).forEach(u=>{u.role=(String(u.u).toLowerCase()==='lee')?'admin':'viewer';});VAULT.roleOwner='lee';persistVault();}
+let DEK=null, DEKraw=null;
+let STORE=null, activeWs='jbp', DB=null;
+function setWorkspace(ws){activeWs=ws;DB=STORE.ws[ws];window.curCampaign=null;}
+function persistVault(){try{localStorage.setItem(appStoreKey(),JSON.stringify(VAULT));}catch(e){}}
+/* ===== Cloud sync (Realtime Database) — stores the SAME encrypted vault as an opaque JSON string, gated by Firebase Auth + rules ===== */
+async function cloudSignIn(username,password){return fbAuth().signInWithEmailAndPassword(userToEmail(username),password);}
+async function cloudSignOut(){try{await fbAuth().signOut();}catch(e){}}
+function cloudCurrentEmail(){const u=fbAuth().currentUser;return u?u.email:null;}
+async function cloudLoadVault(){const snap=await fbDb().ref('vault/blob').once('value');const s=snap.val();return s?JSON.parse(s):null;}
+async function cloudSaveVault(v){await fbDb().ref('vault/blob').set(JSON.stringify(v));}
+async function cloudVaultExists(){try{const snap=await fbDb().ref('vault/blob').once('value');return snap.exists();}catch(e){return false;}}
+let CLOUD_MODE=false, cloudRef=null, lastLocalWrite=0;
+function cloudActive(){return !!localStorage.getItem('jbp_cloud_on');}
+function setCloudChrome(){const pill=document.querySelector('.topbar .pill .lbl');if(pill)pill.textContent=CLOUD_MODE?'Cloud synced':'Autosaved';}
+function refreshActiveView(){
+  const v=document.querySelector('.view.active');const id=v?v.id.replace('view-',''):'';
+  if(id==='dashboard')renderDashboard();
+  else if(id==='campaigns')renderCampaigns();
+  else if(id==='payments')renderPayments();
+  else if(id==='claimtracker')renderClaimTracker();
+  else if(id==='received')renderReceived();
+  else if(id==='tva')renderTva();
+  else if(id==='reports')renderReportView();
+  else if(id==='settings')renderSettings();
+  else if(id==='campaign-detail'&&window.curCampaign)openCampaignDetail(window.curCampaign);
+}
+function startCloudSync(){
+  if(!CLOUD_MODE||!FB_OK)return;
+  stopCloudSync();
+  cloudRef=fbDb().ref('vault/blob');
+  cloudRef.on('value',async function(snap){
+    const s=snap.val();if(!s)return;
+    if(Date.now()-lastLocalWrite<3000)return;           // ignore the echo of our own write
+    try{
+      const cv=JSON.parse(s);
+      if(VAULT&&JSON.stringify(cv.data)===JSON.stringify(VAULT.data))return; // data unchanged
+      VAULT=cv;
+      STORE=buildMemStore(await decData(DEK,cv.data));
+      if(activeWs)setWorkspace(activeWs);
+      persistVault();refreshActiveView();
+      toast('Updated from another device','info');
+    }catch(e){}
+  });
+}
+function stopCloudSync(){if(cloudRef){try{cloudRef.off();}catch(e){}cloudRef=null;}}
+function finishLoginUI(){
+  const errEl=document.getElementById('loginErr');if(errEl)errEl.textContent='';
+  document.getElementById('loginPass').value='';
+  document.getElementById('loginScreen').classList.add('hide');
+  setUserChrome();setCloudChrome();playIntro(showPortal);
+}
+/* ---- one-time migration: create the 3 cloud accounts + upload existing data (encrypted) ---- */
+function openCloudSetup(){if(!canEdit()){toast('Only the admin can set up cloud','warn');return;}['csLee','csSk','csRamya'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const st=document.getElementById('csStatus');if(st)st.textContent='';openOverlay('cloudSetupModal');}
+async function runCloudSetup(){
+  if(!canEdit()){toast('Only the admin can set up cloud','warn');return;}
+  if(!DEKraw||!STORE){toast('Please sign in first','warn');return;}
+  if(!FB_OK){toast('No internet / Firebase not loaded','err');return;}
+  const pw={LEE:(document.getElementById('csLee').value||''),SK:(document.getElementById('csSk').value||''),Ramya:(document.getElementById('csRamya').value||'')};
+  for(const u of ['LEE','SK','Ramya']){if(pw[u].length<6){toast(u+' password must be at least 6 characters','warn');return;}}
+  const btn=document.getElementById('csApplyBtn'),stat=document.getElementById('csStatus');
+  btn.disabled=true;btn.textContent='Setting up…';
+  try{
+    const sec=firebase.initializeApp(FIREBASE_CONFIG,'setup'+Date.now());
+    try{
+      for(const u of ['LEE','SK','Ramya']){
+        const email=userToEmail(u);stat.textContent='Creating account for '+u+'…';
+        try{await sec.auth().createUserWithEmailAndPassword(email,pw[u]);}
+        catch(e){
+          if(e.code==='auth/email-already-in-use'){
+            try{await sec.auth().signInWithEmailAndPassword(email,pw[u]);}
+            catch(e2){throw new Error('An account for '+u+' already exists with a different password.');}
+          } else throw e;
+        }
+        try{await sec.auth().signOut();}catch(e){}
+      }
+    } finally { try{await sec.delete();}catch(e){} }
+    stat.textContent='Encrypting your data…';
+    const users=[];
+    for(const u of ['LEE','SK','Ramya']){const w=await wrapSecret(DEKraw,pw[u]);users.push(Object.assign({u,role:(u==='LEE'?'admin':'viewer')},w));}
+    const data=await encData(DEK,{ws:STORE.ws});
+    const newVault={v:1,users,recovery:(VAULT&&VAULT.recovery)||null,roleOwner:'lee',data};
+    stat.textContent='Uploading (encrypted) to the cloud…';
+    await cloudSignIn('LEE',pw['LEE']);
+    await cloudSaveVault(newVault);
+    VAULT=newVault;CLOUD_MODE=true;localStorage.setItem('jbp_cloud_on','1');persistVault();
+    currentUser={u:'LEE',role:'admin'};
+    startCloudSync();setCloudChrome();
+    closeOverlay('cloudSetupModal');
+    if(document.getElementById('view-settings').classList.contains('active'))renderSettings();
+    toast('✅ Cloud is ON — data synced & encrypted','success');
+  }catch(e){toast('Setup failed: '+(e.message||e.code||e),'err');stat.textContent='';}
+  finally{btn.disabled=false;btn.textContent='Set up cloud';}
+}
+let saveTimer=null,saveDirty=false;
+async function doPersist(){if(!DEK||!VAULT||!STORE){saveDirty=false;return;}try{VAULT.data=await encData(DEK,{ws:STORE.ws});if(CLOUD_MODE&&FB_OK){lastLocalWrite=Date.now();try{await cloudSaveVault(VAULT);}catch(e){}}localStorage.setItem(appStoreKey(),JSON.stringify(VAULT));saveDirty=false;}catch(e){}}
+function save(){saveDirty=true;clearTimeout(saveTimer);saveTimer=setTimeout(doPersist,250);}
+function flushSave(){clearTimeout(saveTimer);if(saveDirty)return doPersist();return Promise.resolve();}
+function logAct(type,msg){DB.activity.unshift({id:uid(),type,msg,ts:Date.now()});DB.activity=DB.activity.slice(0,30);}
+
+/* ---------- metrics ---------- */
+function campEntries(id){return DB.entries.filter(e=>e.campaignId===id);}
+function metrics(list){
+  const paid=list.filter(e=>e.payStatus==='Paid').reduce((s,e)=>s+ +e.amount,0);
+  const pending=list.filter(e=>e.payStatus==='Pending').reduce((s,e)=>s+ +e.amount,0);
+  // "Not Required" claims are excluded from ALL claim analysis (e.g. Reliance — no Vivo claim)
+  const claimList=list.filter(e=>e.claimStatus!=='Not Required');
+  const sub=claimList.filter(e=>e.claimStatus==='Submitted');
+  const claimsSub=sub.length, claimsPend=claimList.filter(e=>e.claimStatus==='Not Submitted').length;
+  const claimSubAmt=sub.reduce((s,e)=>s+ +(e.claimAmount||0),0);
+  const receivedAmt=claimList.reduce((s,e)=>s+ +(e.receivedAmount||0),0);
+  const receivable=Math.max(0,claimSubAmt-receivedAmt);
+  const notClaimed=claimList.filter(e=>e.claimStatus==='Not Submitted').reduce((s,e)=>s+ +e.amount,0);
+  const vivoTotal=claimList.reduce((s,e)=>s+ +(e.vivoAmount||0),0);
+  const stateTotal=claimList.reduce((s,e)=>s+ +(e.stateAmount||0),0);
+  const partners=[...new Set(list.map(e=>e.partner).filter(Boolean))];
+  return {paid,pending,total:paid+pending,claimsSub,claimsPend,claimSubAmt,receivedAmt,receivable,notClaimed,
+    vivoTotal,stateTotal,recovery:pct(receivedAmt,claimSubAmt),partners,count:list.length,claimCount:claimList.length};
+}
+function campMetrics(c){const m=metrics(campEntries(c.id));m.budget=+c.budget||0;m.util=pct(m.paid,m.budget);m.remaining=Math.max(0,m.budget-m.paid);return m;}
+
+/* ---------- financial-year scope (display filter only) ---------- */
+let activeFY='';
+function fyCampaigns(){return DB.campaigns.filter(c=>!activeFY||c.fy===activeFY);}
+function fyCampIds(){return new Set(fyCampaigns().map(c=>c.id));}
+function fyEntries(){const ids=fyCampIds();return DB.entries.filter(e=>ids.has(e.campaignId));}
+function fillFY(){const s=document.getElementById('fySelect');if(!s)return;const cur=s.value;s.innerHTML=DB.fyList.map(f=>'<option>'+esc(f)+'</option>').join('');if(activeFY&&DB.fyList.includes(activeFY))s.value=activeFY;else if(DB.fyList.includes(cur))s.value=cur;}
+function setFY(fy){activeFY=fy;const s=document.getElementById('fySelect');if(s)s.value=fy;refreshFilters();const v=document.querySelector('.view.active');if(!v)return;const id=v.id.replace('view-','');
+  if(id==='dashboard')renderDashboard();
+  else if(id==='campaigns')renderCampaigns();
+  else if(id==='payments'){resetPage();renderPayments();}
+  else if(id==='claimtracker'){const c=document.getElementById('ctFy');if(c)c.value=fy;renderClaimTracker();}
+  else if(id==='received')renderReceivedPage();
+  else if(id==='tva')renderTva();
+  else if(id==='reports')renderReportPage();
+}
+
+/* ---------- nav ---------- */
+const TITLES={dashboard:['Executive Dashboard','CMO view of JBP spend, claims & recovery'],
+  campaigns:['Campaign Management','Create and manage your JBP campaigns'],
+  payments:['Payments & Claims','Operational ledger of trade-partner payments & claims'],
+  claimtracker:['Claim Tracker','Campaign & trade-wise claim status by FY'],
+  received:['Claim Received Status','Reconcile claims received against submissions'],
+  tva:['Target vs Achievement','Model & trade-wise super-month targets'],
+  reports:['Reports & Analytics','Campaign-wise financial & recovery reporting'],
+  settings:['Settings','Master data & workspace configuration'],
+  'campaign-detail':['Campaign Details','Full campaign breakdown']};
+let charts={};
+function navTo(view){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+view).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===view));
+  const [t,s]=TITLES[view]||TITLES.dashboard; document.getElementById('pageTitle').textContent=t; document.getElementById('pageSub').textContent=s;
+  if(view==='dashboard')renderDashboard();
+  if(view==='campaigns')renderCampaigns();
+  if(view==='payments'){payCampaign=null;renderPayments();}
+  if(view==='claimtracker')renderClaimTrackerPage();
+  if(view==='received')renderReceivedPage();
+  if(view==='tva'){tvaModel=null;renderTvaPage();}
+  if(view==='reports')renderReportPage();
+  if(view==='settings')renderSettings();
+  toggleSidebar(false);window.scrollTo({top:0,behavior:'smooth'});
+}
+function toggleSidebar(force){const sb=document.getElementById('sidebar'),bd=document.getElementById('backdrop');const open=force===undefined?!sb.classList.contains('open'):force;sb.classList.toggle('open',open);bd.classList.toggle('show',open);}
+
+/* ---------- toast / confirm / overlay ---------- */
+function toast(msg,type='success'){const ic={success:'✅',warn:'⚠️',err:'❌',info:'ℹ️'};const el=document.createElement('div');el.className='toast '+(type==='success'?'':type);el.innerHTML='<span>'+(ic[type]||'✅')+'</span><span>'+esc(msg)+'</span>';document.getElementById('toastWrap').appendChild(el);requestAnimationFrame(()=>el.classList.add('show'));setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),350);},2600);}
+function undoToast(msg,undoFn){const el=document.createElement('div');el.className='toast info';el.innerHTML='<span>🗑️</span><span>'+esc(msg)+'</span>';const btn=document.createElement('button');btn.textContent='Undo';btn.style.cssText='margin-left:8px;background:var(--primary-soft);color:var(--primary);border:none;border-radius:8px;padding:5px 12px;font-weight:800;font-size:.78rem;cursor:pointer;font-family:inherit';let done=false;btn.onclick=()=>{if(done)return;done=true;undoFn();el.classList.remove('show');setTimeout(()=>el.remove(),350);};el.appendChild(btn);document.getElementById('toastWrap').appendChild(el);requestAnimationFrame(()=>el.classList.add('show'));setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),350);},6000);}
+let confirmCb=null;
+function confirmAction(title,msg,cb,okLabel='Delete'){document.getElementById('confirmTitle').textContent=title;document.getElementById('confirmMsg').textContent=msg;const ok=document.getElementById('confirmOk');ok.textContent=okLabel;confirmCb=cb;openOverlay('confirmModal');}
+document.getElementById('confirmOk').onclick=()=>{closeOverlay('confirmModal');if(confirmCb)confirmCb();confirmCb=null;};
+function openOverlay(id){document.getElementById(id).classList.add('open');}
+function closeOverlay(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
+
+/* ---------- DASHBOARD ---------- */
+const ICONS={campaigns:'<path d="m3 11 18-5v12L3 13"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  budget:'<text x="12" y="17.5" text-anchor="middle" font-size="17" font-weight="800" fill="currentColor" stroke="none" font-family="Inter,sans-serif">₹</text>',
+  paid:'<path d="M20 6 9 17l-5-5"/>',
+  pending:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+  claim:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 15l2 2 4-4"/>',
+  received:'<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>',
+  receivable:'<circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/>',
+  recovery:'<path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/>'};
+function svgIc(p){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';}
+function renderDashboard(){
+  const camps=fyCampaigns();
+  const m=metrics(fyEntries());
+  const activeC=camps.filter(c=>c.status==='Active').length;
+  const cards=[
+    {c:'#3551E0',ic:ICONS.campaigns,val:camps.length,lbl:'Total Campaigns',g:activeC+' active',gc:''},
+    {c:'#6D5BF6',ic:ICONS.budget,val:fmtL(camps.reduce((s,c)=>s+ +c.budget,0)),lbl:'Total Budget',g:'allocated',gc:'flat'},
+    {c:'#0EA868',ic:ICONS.paid,val:fmtL(m.paid),lbl:'Total Paid',g:pct(m.paid,m.total)+'% of spend',gc:''},
+    {c:'#E0921B',ic:ICONS.pending,val:fmtL(m.pending),lbl:'Pending Payment',g:m.pending>0?'to clear':'all clear',gc:m.pending>0?'down':''},
+    {c:'#0E9AA8',ic:ICONS.claim,val:fmtL(m.claimSubAmt),lbl:'Claims Submitted',g:m.claimsSub+' claims',gc:'flat'},
+    {c:'#0EA868',ic:ICONS.received,val:fmtL(m.receivedAmt),lbl:'Claim Received',g:m.recovery+'% recovered',gc:''},
+    {c:'#E0484B',ic:ICONS.receivable,val:fmtL(m.receivable),lbl:'Receivable Pending',g:m.receivable>0?'to collect':'all collected',gc:m.receivable>0?'down':''},
+    {c:'#C99A2E',ic:ICONS.recovery,val:m.recovery+'%',lbl:'Recovery Rate',g:'received / submitted',gc:'flat'},
+  ];
+  document.getElementById('kpiGrid').innerHTML=cards.map(k=>'<div class="kpi" style="--c:'+k.c+'"><div class="top"><div class="ic">'+svgIc(k.ic)+'</div><div class="growth '+k.gc+'">'+(k.gc!=='down'&&k.gc!=='flat'?'▲ ':'')+k.g+'</div></div><div class="val">'+k.val+'</div><div class="lbl">'+k.lbl+'</div></div>').join('');
+  renderActivity();drawDashCharts(m);
+}
+function renderActivity(){
+  const map={campaign:['#e6ebfd','📣'],payment:['#d7f4e7','💳'],claim:['#cfeef2','📄'],received:['#d7f4e7','📥'],edit:['#ece9fd','✏️'],delete:['#fbe0e1','🗑️']};
+  document.getElementById('activityList').innerHTML=DB.activity.length?DB.activity.slice(0,8).map(a=>{const x=map[a.type]||['#eef1f7','•'];return '<li><div class="act-ic" style="background:'+x[0]+'">'+x[1]+'</div><div class="act-body"><div class="t">'+esc(a.msg)+'</div><div class="d">'+a.type+'</div></div><div class="act-time">'+timeAgo(a.ts)+'</div></li>';}).join(''):'<li class="empty" style="padding:24px"><p>No recent activity yet.</p></li>';
+}
+function timeAgo(ts){const s=(Date.now()-ts)/1000;if(s<60)return'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
+
+const CF={family:'Inter',size:11};
+Chart.defaults.font.family='Inter';Chart.defaults.color='#697892';
+function destroy(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+function donut(id,labels,data,colors){destroy(id);const ctx=document.getElementById(id);if(!ctx)return;charts[id]=new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:colors,borderWidth:3,borderColor:'#fff',hoverOffset:7}]},options:{cutout:'66%',plugins:{legend:{position:'bottom',labels:{usePointStyle:true,pointStyle:'circle',padding:14,font:CF}}},maintainAspectRatio:false}});}
+function drawDashCharts(m){
+  donut('chartPayment',['Paid','Pending'],[m.paid,m.pending],['#0EA868','#E0921B']);
+  donut('chartClaim',['Received','Awaiting Receipt','Yet to Submit'],[m.receivedAmt,m.receivable,m.notClaimed],['#0EA868','#E0921B','#cbd5e1']);
+  const camps=fyCampaigns();
+  destroy('chartBudget');
+  charts['chartBudget']=new Chart(document.getElementById('chartBudget'),{type:'bar',data:{labels:camps.map(c=>c.name),datasets:[
+    {label:'Budget',data:camps.map(c=>+c.budget),backgroundColor:'#d3d9ea',borderRadius:6,barPercentage:.62},
+    {label:'Paid',data:camps.map(c=>campMetrics(c).paid),backgroundColor:'#3551E0',borderRadius:6,barPercentage:.62}]},
+    options:{maintainAspectRatio:false,plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',font:CF}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef1f7'},ticks:{callback:v=>fmtL(v)}}}}});
+  destroy('chartRecovery');
+  charts['chartRecovery']=new Chart(document.getElementById('chartRecovery'),{type:'bar',data:{labels:camps.map(c=>c.name),datasets:[
+    {label:'Submitted',data:camps.map(c=>campMetrics(c).claimSubAmt),backgroundColor:'#0E9AA8',borderRadius:6,barPercentage:.62},
+    {label:'Received',data:camps.map(c=>campMetrics(c).receivedAmt),backgroundColor:'#0EA868',borderRadius:6,barPercentage:.62}]},
+    options:{maintainAspectRatio:false,plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',font:CF}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef1f7'},ticks:{callback:v=>fmtL(v)}}}}});
+  destroy('chartShare');
+  charts['chartShare']=new Chart(document.getElementById('chartShare'),{type:'bar',data:{labels:camps.map(c=>c.name),datasets:[
+    {label:'Vivo India Share',data:camps.map(c=>campMetrics(c).vivoTotal),backgroundColor:'#3551E0',borderRadius:6,stack:'s'},
+    {label:'State Share',data:camps.map(c=>campMetrics(c).stateTotal),backgroundColor:'#0E9AA8',borderRadius:6,stack:'s'}]},
+    options:{maintainAspectRatio:false,plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',font:CF}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},y:{stacked:true,grid:{color:'#eef1f7'},ticks:{callback:v=>fmtL(v)}}}}});
+  drawTrendChart();drawYoYChart();
+}
+function monthLabel(ym){const[y,mo]=ym.split('-');return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(+mo)-1]+' '+y.slice(2);}
+function drawTrendChart(){
+  const paidByM={},recByM={};
+  fyEntries().forEach(e=>{if(e.payStatus==='Paid'&&e.payDate){const k=e.payDate.slice(0,7);paidByM[k]=(paidByM[k]||0)+ +e.amount;}if(+e.receivedAmount>0&&e.receivedDate){const k=e.receivedDate.slice(0,7);recByM[k]=(recByM[k]||0)+ +e.receivedAmount;}});
+  const months=[...new Set([...Object.keys(paidByM),...Object.keys(recByM)])].sort();
+  destroy('chartTrend');
+  charts['chartTrend']=new Chart(document.getElementById('chartTrend'),{type:'line',data:{labels:months.map(monthLabel),datasets:[
+    {label:'Paid out',data:months.map(k=>paidByM[k]||0),borderColor:'#3551E0',backgroundColor:'rgba(53,81,224,.12)',fill:true,tension:.3,pointRadius:3},
+    {label:'Claim received',data:months.map(k=>recByM[k]||0),borderColor:'#0EA868',backgroundColor:'rgba(14,168,104,.12)',fill:true,tension:.3,pointRadius:3}]},
+    options:{maintainAspectRatio:false,plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',font:CF}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef1f7'},ticks:{callback:v=>fmtL(v)}}}}});
+}
+function drawYoYChart(){
+  const fys=DB.fyList;
+  const agg=fys.map(fy=>{const cs=DB.campaigns.filter(c=>c.fy===fy);const ids=new Set(cs.map(c=>c.id));const es=DB.entries.filter(e=>ids.has(e.campaignId));const mm=metrics(es);return {budget:cs.reduce((s,c)=>s+ +c.budget,0),paid:mm.paid,claimed:mm.claimSubAmt,received:mm.receivedAmt};});
+  destroy('chartYoY');
+  charts['chartYoY']=new Chart(document.getElementById('chartYoY'),{type:'bar',data:{labels:fys,datasets:[
+    {label:'Budget',data:agg.map(a=>a.budget),backgroundColor:'#d3d9ea',borderRadius:5},
+    {label:'Paid',data:agg.map(a=>a.paid),backgroundColor:'#3551E0',borderRadius:5},
+    {label:'Claimed',data:agg.map(a=>a.claimed),backgroundColor:'#0E9AA8',borderRadius:5},
+    {label:'Received',data:agg.map(a=>a.received),backgroundColor:'#0EA868',borderRadius:5}]},
+    options:{maintainAspectRatio:false,plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',font:CF}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef1f7'},ticks:{callback:v=>fmtL(v)}}}}});
+}
+
+/* ---------- CAMPAIGNS ---------- */
+function renderCampaigns(){
+  const q=(document.getElementById('campSearch').value||'').toLowerCase();
+  const sf=document.getElementById('campStatusFilter').value;
+  let list=fyCampaigns().filter(c=>(!q||(c.name+c.code+c.type).toLowerCase().includes(q))&&(!sf||c.status===sf));
+  const grid=document.getElementById('campGrid');
+  if(!list.length){grid.innerHTML=emptyState('🗂️','No campaigns found',canEdit()?'Create your first JBP campaign to get started.':'No campaigns in this year.',canEdit()?'<button class="btn btn-primary" onclick="openCampaignModal()">+ Add Campaign</button>':'');return;}
+  grid.innerHTML=list.map(c=>{const m=campMetrics(c);return '<div class="card camp-card" onclick="openCampaignDetail(\''+c.id+'\')"><div class="top"><div><div class="name">'+esc(c.name)+'</div><div class="code">'+esc(c.code||'—')+' · '+esc(c.type)+'</div></div><span class="badge '+c.status.toLowerCase()+'">'+c.status+'</span></div><span class="fychip">'+esc(c.fy)+'</span><div class="util-wrap"><div class="util-bar"><span style="width:'+Math.min(100,m.util)+'%'+(m.util>100?';background:linear-gradient(90deg,#E0484B,#E0921B)':'')+'"></span></div><div class="util-meta"><span>'+fmtL(m.paid)+' paid</span><span'+(m.util>100?' style="color:#c33;font-weight:800"':'')+'>'+(m.util>100?'⚠ '+m.util+'% — over budget':m.util+'% of '+fmtL(m.budget))+'</span></div></div><div class="camp-mini"><div class="m"><div class="v">'+fmtL(m.pending)+'</div><div class="k">Pending</div></div><div class="m"><div class="v">'+m.claimsSub+'/'+m.count+'</div><div class="k">Claims</div></div><div class="m"><div class="v">'+m.partners.length+'</div><div class="k">Partners</div></div></div></div>';}).join('');
+}
+function emptyState(ic,h,p,btn=''){return '<div class="empty" style="grid-column:1/-1"><div class="e-ic">'+ic+'</div><h4>'+h+'</h4><p>'+p+'</p>'+btn+'</div>';}
+
+let editingCampaign=null;
+function openCampaignModal(c=null){
+  if(!canEdit())return;
+  editingCampaign=c;document.getElementById('campModalTitle').textContent=c?'Edit Campaign':'Add Campaign';
+  cFy.innerHTML=DB.fyList.map(f=>'<option>'+esc(f)+'</option>').join('');
+  cName.value=c?c.name:'';cCode.value=c?c.code:'';cType.value=c?c.type:'Product Launch';cFy.value=c?c.fy:(activeFY||DEFAULT_FY);
+  cBudget.value=c?c.budget:'';cStatus.value=c?c.status:'Active';cStart.value=c?c.start:todayISO();cEnd.value=c?c.end:'';cDesc.value=c?c.desc:'';
+  cClaimPct.value=(c&&c.claimPct!=null)?c.claimPct:100;
+  cVivoPct.value=(c&&c.vivoPct!=null)?c.vivoPct:50;
+  const showShare=(activeWs==='vivo'&&!c);
+  ['cClaimPctField','cVivoPctField','cCalcBoxField'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=showShare?'':'none';});
+  if(showShare)updateCampCalc();
+  openOverlay('campaignModal');
+}
+function updateCampCalc(){
+  const box=document.getElementById('cCalcBox');if(!box)return;
+  const amt=+document.getElementById('cBudget').value||0;
+  let cp=+document.getElementById('cClaimPct').value;if(isNaN(cp))cp=100;cp=Math.max(0,Math.min(100,cp));
+  let vp=+document.getElementById('cVivoPct').value;if(isNaN(vp))vp=50;vp=Math.max(0,Math.min(100,vp));
+  const claimable=amt*cp/100, vivo=claimable*vp/100, state=claimable-vivo;
+  box.innerHTML=
+    '<div class="cb-row"><span>Claimable amount ('+cp+'% of budget '+fmtL(amt)+')</span><b>'+fmtL(claimable)+'</b></div>'+
+    '<div class="cb-row"><span>🔵 Vivo India Share ('+vp+'%)</span><b style="color:var(--primary)">'+fmtL(vivo)+'</b></div>'+
+    '<div class="cb-row"><span>🟢 State Share ('+(100-vp)+'%)</span><b style="color:var(--teal)">'+fmtL(state)+'</b></div>';
+}
+function saveCampaign(){
+  if(!canEdit())return;
+  const name=cName.value.trim();if(!name){toast('Campaign name is required','warn');return;}
+  const obj={name,code:cCode.value.trim(),type:cType.value,fy:cFy.value,budget:Math.max(0,+cBudget.value||0),status:cStatus.value,start:cStart.value,end:cEnd.value,desc:cDesc.value.trim()};
+  if(activeWs==='vivo'&&!editingCampaign){obj.claimPct=Math.max(0,Math.min(100,+cClaimPct.value||100));obj.vivoPct=Math.max(0,Math.min(100,+cVivoPct.value||50));}
+  if(editingCampaign){Object.assign(editingCampaign,obj);logAct('edit','Campaign edited: '+name);toast('Campaign updated');}
+  else{DB.campaigns.unshift(Object.assign({id:uid(),created:Date.now()},obj));logAct('campaign','New campaign added: '+name);toast('Campaign created');}
+  save();closeOverlay('campaignModal');renderCampaigns();refreshFilters();
+}
+
+function openCampaignDetail(id){
+  const c=DB.campaigns.find(x=>x.id===id);if(!c)return;navTo('campaign-detail');window.curCampaign=id;
+  document.getElementById('cdName').textContent=c.name;document.getElementById('cdTitle').textContent=c.name;
+  document.getElementById('cdMeta').innerHTML=esc(c.code||'—')+' · '+esc(c.type)+' · '+esc(c.fy)+' · <span class="badge '+c.status.toLowerCase()+'" style="vertical-align:middle">'+c.status+'</span> &nbsp; '+(c.start||'—')+' → '+(c.end||'—');
+  document.getElementById('cdEditBtn').onclick=()=>openCampaignModal(c);
+  document.getElementById('cdAddEntryBtn').onclick=()=>openEntryModal(null,id);
+  const m=campMetrics(c);
+  const tiles=[['Total Budget',fmtL(m.budget),'#3551E0'],['Total Paid',fmtL(m.paid),'#0EA868'],['Pending',fmtL(m.pending),'#E0921B'],['Budget Used',m.util+'%','#6D5BF6'],['Vivo India Share',fmtL(m.vivoTotal),'#3551E0'],['State Share',fmtL(m.stateTotal),'#0E9AA8'],['Partners',m.partners.length,'#C99A2E']];
+  document.getElementById('cdStats').innerHTML=tiles.map(t=>'<div class="stat-tile" style="--tc:'+t[2]+'"><div class="k">'+t[0]+'</div><div class="v">'+t[1]+'</div></div>').join('');
+  donut('cdChartBudget',['Paid','Pending','Remaining'],[m.paid,m.pending,m.remaining],['#3551E0','#E0921B','#d3d9ea']);
+  const vs={};campEntries(id).forEach(e=>{if(e.partner)vs[e.partner]=(vs[e.partner]||0)+ +e.amount;});
+  const top=Object.entries(vs).sort((a,b)=>b[1]-a[1]);
+  destroy('cdChartVendor');
+  charts['cdChartVendor']=new Chart(document.getElementById('cdChartVendor'),{type:'bar',data:{labels:top.map(t=>t[0]),datasets:[{data:top.map(t=>t[1]),backgroundColor:'#0EA868',borderRadius:6}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>fmtL(v)},grid:{color:'#eef1f7'}},y:{grid:{display:false}}}}});
+  renderDetailTable(id);
+}
+function renderDetailTable(id){
+  const rows=campEntries(id);const editable=canEdit();
+  const head='<thead><tr><th>Trade Partner</th><th>Activity</th><th>Invoice</th><th class="num">Amount</th><th>Payment</th>'+(editable?'<th></th>':'')+'</tr></thead>';
+  const body=rows.length?rows.map(r=>'<tr>'+cellSelect(r.id,'partner',r.partner,['',...DB.partners])+cellInput(r.id,'activity',r.activity)+cellInput(r.id,'invoice',r.invoice)+cellNum(r.id,'amount',r.amount)+cellSelect(r.id,'payStatus',r.payStatus,['Pending','Paid'])+(editable?'<td><div class="row-actions"><button class="btn btn-danger btn-icon" onclick="deleteEntry(\''+r.id+'\')">🗑</button></div></td>':'')+'</tr>').join(''):'<tr><td colspan="'+(editable?6:5)+'" class="empty"><div class="e-ic">📄</div><h4>No entries yet</h4><p>'+(editable?'Add the first payment entry for this campaign.':'No entries in this campaign.')+'</p></td></tr>';
+  document.getElementById('cdTable').innerHTML=head+'<tbody>'+body+'</tbody>';
+}
+
+/* ---------- PAYMENTS LEDGER ---------- */
+let sortKey='created',sortDir=-1,page=1,perPage=10,payCampaign=null;
+const COLS=[['campaignName','Campaign'],['partner','Trade Partner'],['activity','Activity'],['invoice','Invoice #'],['amount','Amount'],['claimPct','Claim %'],['vivoPct','Vivo %'],['vivoAmount','Vivo Share'],['stateAmount','State Share'],['payStatus','Payment'],['claimStatus','Claim'],['claimToken','Code'],['payDate','Pay Date'],['claimDate','Claim Date'],['claimRef','Claim Ref'],['remarks','Remarks']];
+function campName(id){const c=DB.campaigns.find(x=>x.id===id);return c?c.name:'—';}
+function enrich(e){return Object.assign({},e,{campaignName:campName(e.campaignId)});}
+function resetPage(){page=1;}
+function setPerPage(v){perPage=+v||10;page=1;renderPayments();}
+function getPayFiltered(){
+  const gv=id=>{const el=document.getElementById(id);return el?el.value:'';};
+  const q=gv('paySearch').toLowerCase();
+  const fp=gv('fPartner'),fps=gv('fPayStatus'),fcs=gv('fClaimStatus'),df=gv('fDateFrom'),dt=gv('fDateTo');
+  const fyids=fyCampIds();
+  let list=DB.entries.map(enrich).filter(e=>{
+    if(!fyids.has(e.campaignId))return false;
+    if(payCampaign&&e.campaignId!==payCampaign)return false;
+    if(q&&![e.partner,e.activity,e.invoice,e.remarks,e.claimRef,e.claimToken,e.campaignName].join(' ').toLowerCase().includes(q))return false;
+    if(fp&&e.partner!==fp)return false;
+    if(fps&&e.payStatus!==fps)return false;if(fcs&&e.claimStatus!==fcs)return false;
+    if(df&&(!e.payDate||e.payDate<df))return false;if(dt&&(!e.payDate||e.payDate>dt))return false;return true;});
+  list.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];if(typeof x==='string')x=x.toLowerCase();if(typeof y==='string')y=y.toLowerCase();return(x>y?1:x<y?-1:0)*sortDir;});
+  return list;
+}
+function renderPayCards(){
+  const q=(document.getElementById('payCampSearch').value||'').toLowerCase();
+  const camps=fyCampaigns().filter(c=>!q||((c.name+' '+(c.code||'')+' '+c.type).toLowerCase().includes(q)));
+  const grid=document.getElementById('payCampGrid');
+  if(!camps.length){grid.innerHTML=emptyState('💳','No campaigns here',canEdit()?'Add a campaign (in Campaign Management) or a new entry to get started.':'No campaigns in this year.','');return;}
+  grid.innerHTML=camps.map(c=>{const m=campMetrics(c);const ent=campEntries(c.id).length;return '<div class="card camp-card" onclick="openPayCampaign(\''+c.id+'\')"><div class="top"><div><div class="name">'+esc(c.name)+'</div><div class="code">'+esc(c.code||'—')+' · '+esc(c.type)+'</div></div><span class="badge '+c.status.toLowerCase()+'">'+c.status+'</span></div><div class="camp-mini" style="margin-top:15px"><div class="m"><div class="v">'+ent+'</div><div class="k">Entries</div></div><div class="m"><div class="v">'+fmtL(m.total)+'</div><div class="k">Amount</div></div><div class="m"><div class="v">'+fmtL(m.paid)+'</div><div class="k">Paid</div></div></div><div class="camp-mini" style="margin-top:10px;border-top:none;padding-top:0"><div class="m"><div class="v">'+fmtL(m.pending)+'</div><div class="k">Pending</div></div><div class="m"><div class="v">'+m.claimsSub+'</div><div class="k">Claims Sub</div></div><div class="m"><div class="v">'+m.claimsPend+'</div><div class="k">Claims Pend</div></div></div><div class="pc-go" style="color:var(--primary);font-weight:800;font-size:.82rem;margin-top:15px">View payments →</div></div>';}).join('');
+}
+function openPayCampaign(id){payCampaign=id;resetPage();renderPayments();window.scrollTo({top:0,behavior:'smooth'});}
+function payBackToCards(){payCampaign=null;resetPage();['paySearch','fPartner','fPayStatus','fClaimStatus','fDateFrom','fDateTo'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});renderPayments();}
+function renderPayments(){
+  refreshFilters();
+  if(payCampaign&&!fyCampIds().has(payCampaign))payCampaign=null;
+  const cardsView=document.getElementById('payCardsView'),ledgerView=document.getElementById('payLedgerView');
+  if(!payCampaign){cardsView.style.display='';ledgerView.style.display='none';renderPayCards();return;}
+  cardsView.style.display='none';ledgerView.style.display='';
+  const cc=DB.campaigns.find(x=>x.id===payCampaign);document.getElementById('payLedgerName').textContent=cc?cc.name:'';document.getElementById('payLedgerHead').textContent=cc?cc.name:'';
+  const list=getPayFiltered();const total=list.length,pages=Math.max(1,Math.ceil(total/perPage));if(page>pages)page=pages;
+  const slice=list.slice((page-1)*perPage,page*perPage);const editable=canEdit();
+  const head='<thead><tr>'+COLS.map(c=>'<th class="sortable '+(sortKey===c[0]?'sorted':'')+'" onclick="setSort(\''+c[0]+'\')">'+c[1]+' <span class="arr">'+(sortKey===c[0]?(sortDir>0?'▲':'▼'):'⇅')+'</span></th>').join('')+(editable?'<th class="no-print">Actions</th>':'')+'</tr></thead>';
+  const body=slice.length?slice.map(r=>'<tr><td><span style="font-weight:700">'+esc(r.campaignName)+'</span></td>'+cellSelect(r.id,'partner',r.partner,['',...DB.partners])+cellInput(r.id,'activity',r.activity)+cellInput(r.id,'invoice',r.invoice)+cellNum(r.id,'amount',r.amount)+cellPct(r.id,'claimPct',r.claimPct)+cellPct(r.id,'vivoPct',r.vivoPct)+'<td class="num" style="color:var(--primary);font-weight:700">'+fmtL(r.vivoAmount)+'</td><td class="num" style="color:var(--teal);font-weight:700">'+fmtL(r.stateAmount)+'</td>'+cellSelect(r.id,'payStatus',r.payStatus,['Pending','Paid'])+cellSelect(r.id,'claimStatus',r.claimStatus,['Not Submitted','Submitted','Not Required'])+'<td>'+(r.claimToken?'<span class="token">'+esc(r.claimToken)+'</span>':'<span style="color:#aab4c8">—</span>')+'</td>'+cellDate(r.id,'payDate',r.payDate)+cellDate(r.id,'claimDate',r.claimDate)+cellInput(r.id,'claimRef',r.claimRef)+cellInput(r.id,'remarks',r.remarks)+(editable?'<td class="no-print"><div class="row-actions"><button class="btn btn-danger btn-icon" onclick="deleteEntry(\''+r.id+'\')">🗑</button></div></td>':'')+'</tr>').join(''):'<tr><td colspan="'+(COLS.length+(editable?1:0))+'" class="empty"><div class="e-ic">🔍</div><h4>No matching entries</h4><p>'+(editable?'Try adjusting filters or add a new entry.':'No entries to show.')+'</p></td></tr>';
+  document.getElementById('payTable').innerHTML=head+'<tbody>'+body+'</tbody>';
+  document.getElementById('payPgInfo').textContent=total?('Showing '+((page-1)*perPage+1)+'–'+Math.min(page*perPage,total)+' of '+total+' entries'):'No entries';
+  let btns='<button onclick="goPage('+(page-1)+')" '+(page<=1?'disabled':'')+'>‹</button>';
+  for(let i=1;i<=pages;i++){if(pages>7&&Math.abs(i-page)>2&&i!==1&&i!==pages){if(i===2||i===pages-1)btns+='<span style="padding:0 4px;color:#9aa6bd">…</span>';continue;}btns+='<button class="'+(i===page?'active':'')+'" onclick="goPage('+i+')">'+i+'</button>';}
+  btns+='<button onclick="goPage('+(page+1)+')" '+(page>=pages?'disabled':'')+'>›</button>';
+  document.getElementById('payPgBtns').innerHTML=btns;
+}
+function setSort(k){if(sortKey===k)sortDir*=-1;else{sortKey=k;sortDir=1;}renderPayments();}
+function goPage(p){page=p;renderPayments();const t=document.querySelector('#view-payments .table-card');if(t)window.scrollTo({top:t.offsetTop-90,behavior:'smooth'});}
+
+function cellInput(id,f,v){if(!canEdit())return '<td>'+esc(v||'—')+'</td>';return '<td><input class="cell-edit" value="'+esc(v)+'" data-id="'+id+'" data-f="'+f+'" onchange="updateField(this)"></td>';}
+function cellNum(id,f,v){if(!canEdit())return '<td class="num">'+(v??0)+'</td>';return '<td class="num"><input class="cell-edit num" type="number" min="0" step="0.1" value="'+(v??0)+'" data-id="'+id+'" data-f="'+f+'" onchange="updateField(this)" style="max-width:92px"></td>';}
+function cellPct(id,f,v){if(!canEdit())return '<td class="num">'+(v??0)+'</td>';return '<td class="num"><input class="cell-edit num" type="number" min="0" max="100" step="1" value="'+(v??0)+'" data-id="'+id+'" data-f="'+f+'" onchange="updateField(this)" style="max-width:64px"></td>';}
+function cellDate(id,f,v){if(!canEdit())return '<td>'+(v||'—')+'</td>';return '<td><input class="cell-edit" type="date" value="'+(v||'')+'" data-id="'+id+'" data-f="'+f+'" onchange="updateField(this)" style="max-width:142px"></td>';}
+function cellSelect(id,f,v,opts){if(!canEdit()){if(f==='payStatus')return '<td><span class="badge '+(v==='Paid'?'paid':'pending')+'">'+esc(v||'Pending')+'</span></td>';if(f==='claimStatus')return '<td><span class="badge '+(v==='Submitted'?'submitted':v==='Not Required'?'notreq':'notsub')+'">'+esc(v||'Not Submitted')+'</span></td>';if(f==='receivedStatus')return '<td><span class="badge '+recBadge(v)+'">'+esc(v||'Not Received')+'</span></td>';return '<td>'+esc(v||'—')+'</td>';}if(v!=null&&v!==''&&opts.indexOf(v)<0)opts=[...opts,v];return '<td><select class="cell-edit" data-id="'+id+'" data-f="'+f+'" onchange="updateField(this)">'+opts.map(op=>'<option value="'+esc(op)+'" '+(op===v?'selected':'')+'>'+(op===''?'— None —':esc(op))+'</option>').join('')+'</select></td>';}
+function updateField(el){
+  if(!canEdit())return;
+  const id=el.dataset.id,f=el.dataset.f;const e=DB.entries.find(x=>x.id===id);if(!e)return;
+  if(['amount','claimAmount','receivedAmount','claimPct','vivoPct'].includes(f)){let n=parseFloat(el.value)||0;n=Math.max(0,n);if((f==='claimPct'||f==='vivoPct'))n=Math.min(100,n);e[f]=n;el.value=n;}else e[f]=el.value;
+  if(['amount','claimPct','vivoPct','claimStatus'].includes(f))recomputeShares(e);
+  if(f==='claimStatus'){ if(el.value==='Submitted'){ if(!e.claimDate)e.claimDate=todayISO(); if(!e.claimToken)e.claimToken=genToken(); } }
+  if(f==='payStatus'&&el.value==='Paid'&&!e.payDate)e.payDate=todayISO();
+  if(f==='receivedAmount'){const amt=+e.receivedAmount,claim=+e.claimAmount;e.receivedStatus=amt<=0?'Not Received':(claim>0&&amt>=claim?'Fully Received':'Partially Received');}
+  if((f==='receivedAmount'||f==='receivedStatus')&&e.receivedStatus!=='Not Received'&&!e.receivedDate)e.receivedDate=todayISO();
+  logAct(f.startsWith('claim')?'claim':(f.startsWith('pay')?'payment':(f.startsWith('received')?'received':(f.startsWith('vivo')?'claim':'edit'))),f+' updated for '+(e.partner||'entry')+' ('+campName(e.campaignId)+')');
+  save();
+  if(['payStatus','claimStatus','amount','claimPct','vivoPct','claimAmount','receivedAmount','receivedStatus'].includes(f)){
+    const av=document.querySelector('.view.active');
+    if(av&&av.id==='view-received')renderReceived();else renderPayments();
+    if(window.curCampaign&&document.getElementById('view-campaign-detail').classList.contains('active'))openCampaignDetail(window.curCampaign);
+  }
+}
+function deleteEntry(id){if(!canEdit())return;const idx=DB.entries.findIndex(x=>x.id===id);if(idx<0)return;const e=DB.entries[idx];confirmAction('Delete entry?','Remove '+((e&&e.partner)||'this')+' – '+((e&&e.activity)||'')+' permanently?',()=>{const removed=DB.entries.splice(idx,1)[0];logAct('delete','Entry deleted: '+((removed&&removed.partner)||''));save();const reRender=()=>{renderPayments();if(window.curCampaign&&document.getElementById('view-campaign-detail').classList.contains('active'))openCampaignDetail(window.curCampaign);};reRender();undoToast('Entry deleted',()=>{DB.entries.splice(Math.min(idx,DB.entries.length),0,removed);save();reRender();toast('Entry restored','info');});});}
+
+let editingEntry=null;
+function openEntryModal(entry=null,presetCampaign=null){
+  if(!canEdit())return;
+  const camps=fyCampaigns();
+  if(!camps.length){toast('Create a campaign in '+(activeFY||'this year')+' first','warn');return;}
+  editingEntry=entry;document.getElementById('entryModalTitle').textContent=entry?'Edit Entry':'Add Entry';
+  document.getElementById('eCampaign').innerHTML=camps.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('');
+  const popts=['',...DB.partners];if(entry&&entry.partner&&popts.indexOf(entry.partner)<0)popts.push(entry.partner);
+  document.getElementById('ePartner').innerHTML=popts.map(p=>'<option value="'+esc(p)+'">'+(p===''?'— Select —':esc(p))+'</option>').join('');
+  const e=entry||{};
+  eCampaign.value=entry?entry.campaignId:(presetCampaign||camps[0].id);
+  ePartner.value=e.partner||'';eActivity.value=e.activity||'';eInvoice.value=e.invoice||'';eAmount.value=e.amount||'';ePayStatus.value=e.payStatus||'Pending';ePayDate.value=e.payDate||'';eClaimStatus.value=e.claimStatus||'Not Submitted';eClaimDate.value=e.claimDate||'';eClaimRef.value=e.claimRef||'';eRemarks.value=e.remarks||'';
+  eClaimPct.value=(entry&&entry.claimPct!=null)?entry.claimPct:campClaimDefault(eCampaign.value);
+  eVivoPct.value=(entry&&entry.vivoPct!=null)?entry.vivoPct:campVivoDefault(eCampaign.value);
+  updateEntryCalc();
+  openOverlay('entryModal');
+}
+function campClaimDefault(cid){const c=DB.campaigns.find(x=>x.id===cid);return (c&&c.claimPct!=null)?c.claimPct:100;}
+function campVivoDefault(cid){const c=DB.campaigns.find(x=>x.id===cid);return (c&&c.vivoPct!=null)?c.vivoPct:50;}
+function onEntryCampaignChange(){if(editingEntry)return;eClaimPct.value=campClaimDefault(eCampaign.value);eVivoPct.value=campVivoDefault(eCampaign.value);updateEntryCalc();
+}
+function updateEntryCalc(){
+  const amt=+document.getElementById('eAmount').value||0;
+  const cs=document.getElementById('eClaimStatus').value;
+  const box=document.getElementById('calcBox');
+  if(cs==='Not Required'){
+    box.innerHTML='<div class="cb-row"><span>🚫 No claim from Vivo — full amount is State / Trade borne</span></div>'+
+      '<div class="cb-row"><span>🔵 Vivo India Share</span><b style="color:var(--primary)">'+fmtL(0)+'</b></div>'+
+      '<div class="cb-row"><span>🟢 State Share</span><b style="color:var(--teal)">'+fmtL(amt)+'</b></div>';
+    return;
+  }
+  let cp=+document.getElementById('eClaimPct').value; if(isNaN(cp))cp=100; cp=Math.max(0,Math.min(100,cp));
+  let vp=+document.getElementById('eVivoPct').value; if(isNaN(vp))vp=50; vp=Math.max(0,Math.min(100,vp));
+  const claimable=amt*cp/100, vivo=claimable*vp/100, state=claimable-vivo;
+  box.innerHTML=
+    '<div class="cb-row"><span>Claimable amount ('+cp+'% of '+fmtL(amt)+')</span><b>'+fmtL(claimable)+'</b></div>'+
+    '<div class="cb-row"><span>🔵 Vivo India Share ('+vp+'%)</span><b style="color:var(--primary)">'+fmtL(vivo)+'</b></div>'+
+    '<div class="cb-row"><span>🟢 State Share ('+(100-vp)+'%)</span><b style="color:var(--teal)">'+fmtL(state)+'</b></div>';
+}
+function saveEntry(){
+  if(!canEdit())return;
+  const partner=ePartner.value.trim();if(!partner){toast('Trade partner is required','warn');return;}if(!eCampaign.value){toast('Select a campaign','warn');return;}
+  const amount=Math.max(0,+eAmount.value||0);
+  const cp=eClaimPct.value===''?100:Math.max(0,Math.min(100,+eClaimPct.value||0));
+  const vp=eVivoPct.value===''?50:Math.max(0,Math.min(100,+eVivoPct.value||0));
+  const invoice=eInvoice.value.trim();
+  if(invoice&&DB.entries.some(x=>x.campaignId===eCampaign.value&&x.invoice===invoice&&(!editingEntry||x.id!==editingEntry.id)))toast('Note: invoice '+invoice+' already exists in this campaign','warn');
+  const obj={campaignId:eCampaign.value,partner,activity:eActivity.value.trim(),invoice,amount,claimPct:cp,vivoPct:vp,payStatus:ePayStatus.value,payDate:ePayDate.value,claimStatus:eClaimStatus.value,claimDate:eClaimDate.value,claimRef:eClaimRef.value.trim(),remarks:eRemarks.value.trim()};
+  if(editingEntry){Object.assign(editingEntry,obj);recomputeShares(editingEntry);if(obj.claimStatus==='Submitted'&&!editingEntry.claimToken)editingEntry.claimToken=genToken();logAct('edit','Entry edited: '+partner);toast('Entry updated');}
+  else{const ne=Object.assign({id:uid(),created:Date.now(),receivedStatus:'Not Received',receivedAmount:0,receivedDate:'',claimToken:''},obj);recomputeShares(ne);if(obj.claimStatus==='Submitted')ne.claimToken=genToken();DB.entries.unshift(ne);logAct('payment','New entry added: '+partner+' ('+campName(obj.campaignId)+')');toast('Entry added');}
+  if(obj.activity&&!DB.activities.includes(obj.activity))DB.activities.push(obj.activity);
+  save();closeOverlay('entryModal');renderPayments();
+  if(window.curCampaign&&document.getElementById('view-campaign-detail').classList.contains('active'))openCampaignDetail(window.curCampaign);
+}
+
+/* ---------- filters & suggestions ---------- */
+function refreshFilters(){
+  const fyc=fyCampaigns();
+  fillSelect('fPartner','All Partners',DB.partners.map(p=>[p,p]));
+  fillSelect('reportCampaign',null,fyc.map(c=>[c.id,c.name]));
+  fillSelect('ctFy',null,DB.fyList.map(f=>[f,f]));
+  const ctFy=document.getElementById('ctFy');if(ctFy)ctFy.value=activeFY||(DB.fyList.includes(DEFAULT_FY)?DEFAULT_FY:(DB.fyList[0]||''));
+  fillFY();
+  document.getElementById('activityDatalist').innerHTML=DB.activities.map(a=>'<option value="'+esc(a)+'">').join('');
+}
+function fillSelect(id,allLabel,pairs){const sel=document.getElementById(id);if(!sel)return;const cur=sel.value;sel.innerHTML=(allLabel?'<option value="">'+allLabel+'</option>':'')+pairs.map(p=>'<option value="'+esc(p[0])+'">'+esc(p[1])+'</option>').join('');if([...sel.options].some(o=>o.value===cur))sel.value=cur;}
+function clearFilters(){['fPartner','fPayStatus','fClaimStatus','fDateFrom','fDateTo','paySearch'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});resetPage();renderPayments();}
+function onSearchInput(){resetPage();renderPayments();const q=document.getElementById('paySearch').value.toLowerCase();const box=document.getElementById('paySuggest');if(!q){box.classList.remove('show');return;}const pool=[...new Set(DB.entries.flatMap(e=>[e.partner,e.activity,e.invoice]).filter(Boolean))];const hits=pool.filter(x=>x.toLowerCase().includes(q)).slice(0,6);box.innerHTML=hits.map(h=>'<div onclick="pickSuggest(\''+esc(h).replace(/'/g,"\\'")+'\')">'+esc(h)+'</div>').join('');box.classList.toggle('show',hits.length>0);}
+function pickSuggest(v){document.getElementById('paySearch').value=v;document.getElementById('paySuggest').classList.remove('show');resetPage();renderPayments();}
+document.addEventListener('click',e=>{if(!e.target.closest('.search')){const s=document.getElementById('paySuggest');if(s)s.classList.remove('show');}});
+
+/* ---------- CLAIM TRACKER ---------- */
+let ctMode='campaign',ctGroup=null,ctKeys=[];
+function setCtMode(m){ctMode=m;ctGroup=null;document.getElementById('ctModeCamp').classList.toggle('on',m==='campaign');document.getElementById('ctModeTrade').classList.toggle('on',m==='trade');renderClaimTracker();}
+function renderClaimTrackerPage(){ctGroup=null;refreshFilters();renderClaimTracker();}
+function ctEntries(){const fy=document.getElementById('ctFy').value;const ids=new Set(DB.campaigns.filter(c=>!fy||c.fy===fy).map(c=>c.id));return DB.entries.filter(e=>ids.has(e.campaignId));}
+function ctGroupsOf(list){const groups={};list.forEach(e=>{const key=ctMode==='campaign'?campName(e.campaignId):(e.partner||'— No Partner —');(groups[key]=groups[key]||[]).push(e);});return groups;}
+function renderClaimTracker(){
+  const list=ctEntries().filter(e=>e.claimStatus!=='Not Required');
+  const groups=ctGroupsOf(list);
+  if(ctGroup&&!groups[ctGroup])ctGroup=null;
+  const cardsV=document.getElementById('ctCardsView'),drillV=document.getElementById('ctDrillView');
+  if(!ctGroup){
+    cardsV.style.display='';drillV.style.display='none';
+    const m=metrics(list);
+    const tiles=[['Vivo Claim Submitted',fmtL(m.claimSubAmt),'#3551E0'],['Received',fmtL(m.receivedAmt),'#0EA868'],['Receivable Pending',fmtL(m.receivable),'#E0484B'],['State Share',fmtL(m.stateTotal),'#0E9AA8'],['Recovery Rate',m.recovery+'%','#C99A2E']];
+    document.getElementById('ctSummary').innerHTML=tiles.map(t=>'<div class="stat-tile" style="--tc:'+t[2]+'"><div class="k">'+t[0]+'</div><div class="v">'+t[1]+'</div></div>').join('');
+    ctKeys=Object.keys(groups).sort();
+    const grid=document.getElementById('ctCardGrid');
+    if(!ctKeys.length){grid.innerHTML=emptyState('📄','No claims for this year','Mark claims as Submitted to see them here.','');return;}
+    grid.innerHTML=ctKeys.map((k,i)=>{const gm=metrics(groups[k]);return '<div class="card camp-card" onclick="ctOpen('+i+')"><div class="top"><div><div class="name">'+esc(k)+'</div><div class="code">'+(ctMode==='campaign'?'Campaign':'Trade Partner')+'</div></div><span class="badge '+(pct(gm.claimsSub,gm.count)>=100?'submitted':'notsub')+'">'+pct(gm.claimsSub,gm.count)+'% Submitted</span></div><div class="camp-mini" style="margin-top:15px"><div class="m"><div class="v">'+gm.claimsSub+'</div><div class="k">Submitted</div></div><div class="m"><div class="v">'+gm.claimsPend+'</div><div class="k">Pending</div></div><div class="m"><div class="v">'+fmtL(gm.claimSubAmt)+'</div><div class="k">Claim Amt</div></div></div><div class="camp-mini" style="margin-top:10px;border-top:none;padding-top:0"><div class="m"><div class="v">'+fmtL(gm.receivedAmt)+'</div><div class="k">Received</div></div><div class="m"><div class="v">'+fmtL(gm.receivable)+'</div><div class="k">Receivable</div></div><div class="m"><div class="v">'+gm.recovery+'%</div><div class="k">Recovery</div></div></div><div class="pc-go" style="color:var(--primary);font-weight:800;font-size:.82rem;margin-top:15px">View claims →</div></div>';}).join('');
+    return;
+  }
+  cardsV.style.display='none';drillV.style.display='';
+  const g=groups[ctGroup],gm=metrics(g);
+  document.getElementById('ctDrillName').textContent=ctGroup;document.getElementById('ctDrillHead').textContent=ctGroup;
+  const dt=[['Submitted',gm.claimsSub,'#3551E0'],['Pending',gm.claimsPend,'#E0921B'],['Vivo Claim',fmtL(gm.claimSubAmt),'#0E9AA8'],['Received',fmtL(gm.receivedAmt),'#0EA868'],['Receivable',fmtL(gm.receivable),'#E0484B']];
+  document.getElementById('ctDrillSummary').innerHTML=dt.map(t=>'<div class="stat-tile" style="--tc:'+t[2]+'"><div class="k">'+t[0]+'</div><div class="v">'+t[1]+'</div></div>').join('');
+  const head='<thead><tr>'+(ctMode==='campaign'?'<th>Trade Partner</th>':'<th>Campaign</th>')+'<th>Activity</th><th class="num">Amount</th><th class="num">Vivo Claim</th><th class="num">State Share</th><th>Claim Status</th><th>Code</th><th class="num">Received</th><th>Received Status</th></tr></thead>';
+  const body=g.map(e=>'<tr>'+(ctMode==='campaign'?'<td>'+esc(e.partner||'—')+'</td>':'<td style="font-weight:600">'+esc(campName(e.campaignId))+'</td>')+'<td>'+esc(e.activity||'—')+'</td><td class="num">'+fmtL(e.amount)+'</td><td class="num" style="color:var(--primary);font-weight:700">'+fmtL(e.vivoAmount)+'</td><td class="num" style="color:var(--teal);font-weight:700">'+fmtL(e.stateAmount)+'</td><td><span class="badge '+(e.claimStatus==='Submitted'?'submitted':'notsub')+'">'+(e.claimStatus||'Not Submitted')+'</span></td><td>'+(e.claimToken?'<span class="token">'+esc(e.claimToken)+'</span>':'<span style="color:#aab4c8">—</span>')+'</td><td class="num">'+fmtL(e.receivedAmount)+'</td><td><span class="badge '+recBadge(e.receivedStatus)+'">'+(e.receivedStatus||'Not Received')+'</span></td></tr>').join('');
+  document.getElementById('ctDrillTable').innerHTML=head+'<tbody>'+body+'</tbody>';
+}
+function ctOpen(i){ctGroup=ctKeys[i];renderClaimTracker();window.scrollTo({top:0,behavior:'smooth'});}
+function ctBack(){ctGroup=null;renderClaimTracker();}
+function recBadge(s){return s==='Fully Received'?'received':(s==='Partially Received'?'partial':'notrec');}
+
+/* ---------- CLAIM RECEIVED ---------- */
+let recCampaign=null;
+function renderReceivedPage(){document.getElementById('lookupResult').innerHTML='';recCampaign=null;renderReceived();}
+function renderReceived(){
+  const subs=fyEntries().filter(e=>e.claimStatus==='Submitted');
+  const groups={};subs.forEach(e=>{(groups[e.campaignId]=groups[e.campaignId]||[]).push(e);});
+  if(recCampaign&&!groups[recCampaign])recCampaign=null;
+  const cardsV=document.getElementById('recCardsView'),drillV=document.getElementById('recDrillView');
+  if(!recCampaign){
+    cardsV.style.display='';drillV.style.display='none';
+    const ids=Object.keys(groups);const grid=document.getElementById('recCampGrid');
+    if(!ids.length){grid.innerHTML=emptyState('📥','No submitted claims yet','Mark claims as Submitted in the ledger to track receipts here.','');return;}
+    grid.innerHTML=ids.map(id=>{const g=groups[id],gm=metrics(g),c=DB.campaigns.find(x=>x.id===id);const fully=g.filter(e=>e.receivedStatus==='Fully Received').length;return '<div class="card camp-card" onclick="recOpen(\''+id+'\')"><div class="top"><div><div class="name">'+esc(c?c.name:'—')+'</div><div class="code">'+esc(c?(c.code||''):'')+'</div></div><span class="badge '+(gm.receivable<=0?'received':'notrec')+'">'+gm.recovery+'% received</span></div><div class="camp-mini" style="margin-top:15px"><div class="m"><div class="v">'+g.length+'</div><div class="k">Claims</div></div><div class="m"><div class="v">'+fmtL(gm.claimSubAmt)+'</div><div class="k">Claimed</div></div><div class="m"><div class="v">'+fully+'</div><div class="k">Fully Recd</div></div></div><div class="camp-mini" style="margin-top:10px;border-top:none;padding-top:0"><div class="m"><div class="v">'+fmtL(gm.receivedAmt)+'</div><div class="k">Received</div></div><div class="m"><div class="v">'+fmtL(gm.receivable)+'</div><div class="k">Receivable</div></div><div class="m"><div class="v">'+gm.recovery+'%</div><div class="k">Recovery</div></div></div><div class="pc-go" style="color:var(--primary);font-weight:800;font-size:.82rem;margin-top:15px">Update received →</div></div>';}).join('');
+    return;
+  }
+  cardsV.style.display='none';drillV.style.display='';
+  const c=DB.campaigns.find(x=>x.id===recCampaign);document.getElementById('recDrillName').textContent=c?c.name:'';document.getElementById('recDrillHead').textContent=c?c.name:'';
+  renderRecTable(groups[recCampaign]);
+}
+function recOpen(id){recCampaign=id;renderReceived();window.scrollTo({top:0,behavior:'smooth'});}
+function recBack(){recCampaign=null;renderReceived();}
+function lookupClaim(){
+  const code=document.getElementById('tokenLookup').value.trim();
+  if(code.length!==4){toast('Enter the 4-digit claim code','warn');return;}
+  const e=DB.entries.find(x=>x.claimToken===code);
+  const box=document.getElementById('lookupResult');
+  if(!e){box.innerHTML='<div class="card result-card"><div class="empty" style="padding:24px"><div class="e-ic">🔎</div><h4>No claim found for code '+esc(code)+'</h4><p>Check the Claim Tracker for valid codes.</p></div></div>';return;}
+  renderResultCard(e);document.getElementById('lookupResult').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function renderResultCard(e){
+  const box=document.getElementById('lookupResult');
+  box.innerHTML='<div class="card result-card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><div><div style="font-size:.74rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">Claim Code</div><div style="font-size:1.6rem;font-weight:800;font-family:ui-monospace,monospace;letter-spacing:3px;color:var(--primary)">'+esc(e.claimToken)+'</div></div><span class="badge '+recBadge(e.receivedStatus)+'" style="font-size:.8rem">'+(e.receivedStatus||'Not Received')+'</span></div>'
+  +'<div class="result-grid">'
+  +'<div class="rg"><div class="k">Campaign</div><div class="v">'+esc(campName(e.campaignId))+'</div></div>'
+  +'<div class="rg"><div class="k">Trade Partner</div><div class="v">'+esc(e.partner||'—')+'</div></div>'
+  +'<div class="rg"><div class="k">Activity</div><div class="v">'+esc(e.activity||'—')+'</div></div>'
+  +'<div class="rg"><div class="k">Claim Amount</div><div class="v">'+fmtL(e.claimAmount)+'</div></div>'
+  +'<div class="rg"><div class="k">Claim Ref</div><div class="v">'+esc(e.claimRef||'—')+'</div></div>'
+  +'<div class="rg"><div class="k">Submitted On</div><div class="v">'+esc(e.claimDate||'—')+'</div></div>'
+  +'</div>'
+  +(canEdit()?('<div class="form-grid" style="margin-top:6px">'
+  +'<div class="field"><label>Received Amount (₹)</label><input id="rcAmt" type="number" min="0" step="1" value="'+(e.receivedAmount||'')+'"></div>'
+  +'<div class="field"><label>Received Status</label><select id="rcStatus">'+['Not Received','Partially Received','Fully Received'].map(s=>'<option '+(s===e.receivedStatus?'selected':'')+'>'+s+'</option>').join('')+'</select></div>'
+  +'<div class="field"><label>Received Date</label><input id="rcDate" type="date" value="'+(e.receivedDate||'')+'"></div>'
+  +'<div class="field"><label>&nbsp;</label><button class="btn btn-primary" onclick="saveReceived(\''+e.id+'\')">💾 Update Received</button></div>'
+  +'</div>'):('<div class="result-grid" style="margin-top:6px"><div class="rg"><div class="k">Received Amount</div><div class="v">'+fmtL(e.receivedAmount)+'</div></div><div class="rg"><div class="k">Received Status</div><div class="v">'+esc(e.receivedStatus||'Not Received')+'</div></div><div class="rg"><div class="k">Received Date</div><div class="v">'+esc(e.receivedDate||'—')+'</div></div></div>'))
+  +'</div>';
+}
+function saveReceived(id){
+  if(!canEdit())return;
+  const e=DB.entries.find(x=>x.id===id);if(!e)return;
+  e.receivedAmount=parseFloat(document.getElementById('rcAmt').value)||0;
+  e.receivedStatus=document.getElementById('rcStatus').value;
+  e.receivedDate=document.getElementById('rcDate').value;
+  if(e.receivedAmount>0&&e.receivedStatus==='Not Received')e.receivedStatus=(e.receivedAmount>= +e.claimAmount? 'Fully Received':'Partially Received');
+  if(e.receivedStatus!=='Not Received'&&!e.receivedDate)e.receivedDate=todayISO();
+  logAct('received','Claim '+e.claimToken+' received update: '+fmtL(e.receivedAmount)+' ('+e.receivedStatus+')');
+  save();toast('Claim '+e.claimToken+' updated');renderResultCard(e);renderReceived();renderDashboard();
+}
+function renderRecTable(subs){
+  subs=subs||fyEntries().filter(e=>e.claimStatus==='Submitted');
+  const head='<thead><tr><th>Code</th><th>Campaign</th><th>Trade Partner</th><th class="num">Claim Amt</th><th class="num">Received Amt</th><th>Received Status</th><th>Received Date</th></tr></thead>';
+  const body=subs.length?subs.map(e=>'<tr><td><span class="token">'+esc(e.claimToken)+'</span></td><td style="font-weight:600">'+esc(campName(e.campaignId))+'</td><td>'+esc(e.partner||'—')+'</td><td class="num">'+fmtL(e.claimAmount)+'</td>'+cellNum(e.id,'receivedAmount',e.receivedAmount)+cellSelect(e.id,'receivedStatus',e.receivedStatus,['Not Received','Partially Received','Fully Received'])+cellDate(e.id,'receivedDate',e.receivedDate)+'</tr>').join(''):'<tr><td colspan="7" class="empty"><div class="e-ic">📥</div><h4>No submitted claims yet</h4><p>Mark claims as Submitted in the ledger to track receipts here.</p></td></tr>';
+  document.getElementById('recTable').innerHTML=head+'<tbody>'+body+'</tbody>';
+}
+/* ---------- bulk mark received ---------- */
+function openBulkReceived(){
+  if(!canEdit())return;
+  const sel=document.getElementById('bulkFy');
+  sel.innerHTML=DB.fyList.map(f=>'<option>'+esc(f)+'</option>').join('');
+  const pref=DB.fyList.includes('FY 2025-26')?'FY 2025-26':(activeFY||DB.fyList[0]||'');
+  if(pref)sel.value=pref;
+  renderBulkCampList();
+  openOverlay('bulkReceivedModal');
+}
+function bulkCamps(){const fy=document.getElementById('bulkFy').value;return DB.campaigns.filter(c=>c.fy===fy);}
+function renderBulkCampList(){
+  const wrap=document.getElementById('bulkCampList');const camps=bulkCamps();const applyBtn=document.getElementById('bulkApplyBtn');
+  if(!camps.length){wrap.innerHTML='<div style="color:var(--muted);font-size:.82rem">No campaigns in this financial year.</div>';document.getElementById('bulkSummary').innerHTML='';applyBtn.disabled=true;return;}
+  applyBtn.disabled=false;
+  wrap.innerHTML=camps.map(c=>{const n=campEntries(c.id).filter(e=>e.claimStatus!=='Not Required').length;return '<label style="display:flex;align-items:center;gap:10px;font-size:.86rem;font-weight:600;cursor:pointer"><input type="checkbox" class="bulkChk" value="'+c.id+'" checked onchange="bulkSummaryUpdate()" style="width:16px;height:16px"> '+esc(c.name)+' <span style="color:var(--muted);font-weight:500;font-size:.78rem">— '+n+' claimable '+(n===1?'entry':'entries')+'</span></label>';}).join('');
+  bulkSummaryUpdate();
+}
+function bulkSelectedIds(){return [...document.querySelectorAll('.bulkChk:checked')].map(x=>x.value);}
+function bulkScopeEntries(){const ids=new Set(bulkSelectedIds());return DB.entries.filter(e=>ids.has(e.campaignId)&&e.claimStatus!=='Not Required');}
+function bulkSummaryUpdate(){
+  const list=bulkScopeEntries();
+  const amt=list.reduce((s,e)=>{const t=Object.assign({},e);recomputeShares(t);return s+(+t.claimAmount||0);},0);
+  document.getElementById('bulkSummary').innerHTML='<div class="cb-row"><span>Campaigns selected</span><b>'+bulkSelectedIds().length+'</b></div><div class="cb-row"><span>Entries to mark received</span><b>'+list.length+'</b></div><div class="cb-row"><span>Total received amount</span><b style="color:var(--primary)">'+fmtL(amt)+'</b></div>';
+}
+function applyBulkReceived(){
+  if(!canEdit())return;
+  const list=bulkScopeEntries();
+  if(!list.length){toast('Nothing to update — tick at least one campaign with claimable entries','warn');return;}
+  const before=list.map(e=>({id:e.id,snap:JSON.parse(JSON.stringify(e))}));
+  list.forEach(e=>{
+    if(e.claimStatus!=='Submitted'){e.claimStatus='Submitted';if(!e.claimToken)e.claimToken=genToken();}
+    recomputeShares(e);
+    e.receivedStatus='Fully Received';
+    e.receivedAmount=+e.claimAmount||0;
+  });
+  const n=list.length;
+  logAct('received','Bulk update — '+n+' claim'+(n===1?'':'s')+' marked fully received');
+  save();closeOverlay('bulkReceivedModal');renderReceived();renderDashboard();
+  undoToast(n+' claim'+(n===1?'':'s')+' marked fully received',()=>{before.forEach(b=>{const e=DB.entries.find(x=>x.id===b.id);if(e)Object.assign(e,b.snap);});save();renderReceived();renderDashboard();toast('Bulk update undone','info');});
+}
+
+/* ---------- REPORTS ---------- */
+let rpCampaign=null;
+function renderReportPage(){rpCampaign=null;refreshFilters();renderReportView();}
+function renderReportView(){
+  const camps=fyCampaigns();if(rpCampaign&&!camps.some(c=>c.id===rpCampaign))rpCampaign=null;
+  const cardsV=document.getElementById('rpCardsView'),drillV=document.getElementById('rpDrillView');
+  if(!rpCampaign){
+    cardsV.style.display='';drillV.style.display='none';
+    const grid=document.getElementById('rpCampGrid');
+    if(!camps.length){grid.innerHTML=emptyState('📊','No campaigns here','Create a campaign to generate reports.','');return;}
+    grid.innerHTML=camps.map(c=>{const m=campMetrics(c);return '<div class="card camp-card" onclick="rpOpen(\''+c.id+'\')"><div class="top"><div><div class="name">'+esc(c.name)+'</div><div class="code">'+esc(c.code||'—')+' · '+esc(c.type)+'</div></div><span class="badge '+(m.util>100?'closed':c.status.toLowerCase())+'">'+(m.util>100?'⚠ Over':c.status)+'</span></div><div class="camp-mini" style="margin-top:15px"><div class="m"><div class="v">'+fmtL(m.budget)+'</div><div class="k">Budget</div></div><div class="m"><div class="v">'+fmtL(m.paid)+'</div><div class="k">Paid</div></div><div class="m"><div class="v"'+(m.util>100?' style="color:#c33"':'')+'>'+m.util+'%</div><div class="k">Used</div></div></div><div class="camp-mini" style="margin-top:10px;border-top:none;padding-top:0"><div class="m"><div class="v">'+fmtL(m.claimSubAmt)+'</div><div class="k">Claimed</div></div><div class="m"><div class="v">'+fmtL(m.receivedAmt)+'</div><div class="k">Received</div></div><div class="m"><div class="v">'+m.recovery+'%</div><div class="k">Recovery</div></div></div><div class="pc-go" style="color:var(--primary);font-weight:800;font-size:.82rem;margin-top:15px">Open report →</div></div>';}).join('');
+    return;
+  }
+  cardsV.style.display='none';drillV.style.display='';
+  const c=DB.campaigns.find(x=>x.id===rpCampaign);document.getElementById('rpDrillName').textContent=c?c.name:'';document.getElementById('rpDrillHead').textContent=c?c.name:'';
+  renderReport();
+}
+function rpOpen(id){rpCampaign=id;renderReportView();window.scrollTo({top:0,behavior:'smooth'});}
+function rpBack(){rpCampaign=null;renderReportView();}
+function renderReport(){
+  const id=rpCampaign;const c=DB.campaigns.find(x=>x.id===id);const body=document.getElementById('reportBody');
+  if(!c){body.innerHTML='';return;}
+  const list=campEntries(id),m=campMetrics(c);
+  const tiles=[['Total Budget',fmtL(m.budget)],['Total Paid',fmtL(m.paid)],['Pending Amount',fmtL(m.pending)],['Budget Utilization',m.util+'%'],['Vivo India Share',fmtL(m.vivoTotal)],['State Share',fmtL(m.stateTotal)],['Claims Submitted',m.claimsSub],['Claim Submitted Value',fmtL(m.claimSubAmt)],['Claim Received',fmtL(m.receivedAmt)],['Receivable Pending',fmtL(m.receivable)],['Recovery Rate',m.recovery+'%'],['Claim Submission',pct(m.claimsSub,m.count)+'%']];
+  const vs={},as={};list.forEach(e=>{if(e.partner)vs[e.partner]=(vs[e.partner]||0)+ +e.amount;if(e.activity)as[e.activity]=(as[e.activity]||0)+ +e.amount;});
+  const payAging=agingBuckets(list.filter(e=>e.payStatus==='Pending'),'payDate');
+  const claimAging=agingBuckets(list.filter(e=>e.claimStatus==='Not Submitted'),'claimDate');
+  const receiptAging=agingBuckets(list.filter(e=>e.claimStatus==='Submitted'&&(+e.claimAmount-+e.receivedAmount)>0),'claimDate',e=>+e.claimAmount-+e.receivedAmount);
+  body.innerHTML='<div class="report-grid">'+tiles.map(t=>'<div class="stat-tile"><div class="k">'+t[0]+'</div><div class="v">'+t[1]+'</div></div>').join('')+'</div>'
+    +'<div class="two-col"><div class="card list-card"><h4>Trade Partner-wise Spend</h4>'+barList(vs)+'</div><div class="card list-card"><h4>Activity-wise Spend</h4>'+barList(as)+'</div></div>'
+    +'<div class="two-col" style="margin-top:16px"><div class="card list-card"><h4>Payment Aging (pending)</h4>'+agingTable(payAging)+'</div><div class="card list-card"><h4>Claim Aging (yet to submit)</h4>'+agingTable(claimAging)+'</div></div>'
+    +'<div class="card list-card" style="margin-top:16px"><h4>Claim Receipt Aging (submitted, awaiting receipt)</h4><p style="font-size:.78rem;color:var(--muted);margin-bottom:10px">How long submitted claims have been waiting for money back from Vivo — your locked-up working capital.</p>'+agingTable(receiptAging)+'</div>';
+}
+function barList(obj){const e=Object.entries(obj).sort((a,b)=>b[1]-a[1]);if(!e.length)return '<p style="color:var(--muted);font-size:.82rem">No data.</p>';const max=Math.max(...e.map(x=>x[1]));return e.map(([k,v])=>'<div class="bar-row"><div class="nm" title="'+esc(k)+'">'+esc(k)+'</div><div class="track"><span style="width:'+pct(v,max)+'%"></span></div><div class="amt">'+fmtL(v)+'</div></div>').join('');}
+function agingBuckets(list,dateField,amtFn){const b={'0-30':0,'31-60':0,'61-90':0,'90+':0};list.forEach(e=>{const raw=(dateField&&e[dateField])?Date.parse(e[dateField]):(e.created||Date.now());const d=(Date.now()-raw)/86400000;const amt=amtFn?amtFn(e):+e.amount;if(d<=30)b['0-30']+=amt;else if(d<=60)b['31-60']+=amt;else if(d<=90)b['61-90']+=amt;else b['90+']+=amt;});return b;}
+function agingTable(b){const rows=Object.entries(b);const tot=rows.reduce((s,r)=>s+r[1],0);if(tot===0)return '<p style="color:var(--muted);font-size:.82rem">Nothing outstanding 🎉</p>';return '<table><thead><tr><th>Age (days)</th><th class="num">Amount</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+r[0]+'</td><td class="num">'+fmtL(r[1])+'</td></tr>').join('')+'<tr style="font-weight:800"><td>Total</td><td class="num">'+fmtL(tot)+'</td></tr></tbody></table>';}
+
+/* ---------- TARGET VS ACHIEVEMENT ---------- */
+let tvaModel=null,editingTva=null;
+const fmtN=n=>Number(n||0).toLocaleString('en-IN');
+function tvaRecords(){return DB.tva.filter(r=>r.fy===activeFY);}
+/* expense auto-pulled from Payments: same FY + campaign name = model + trade partner = trade, all case-insensitive */
+const _norm=s=>String(s==null?'':s).trim().toLowerCase();
+function tvaExpenseFor(fy,model,trade){const m=_norm(model),tr=_norm(trade);if(!tr)return 0;return DB.entries.reduce((s,e)=>{const c=DB.campaigns.find(x=>x.id===e.campaignId);if(!c||c.fy!==fy||_norm(c.name)!==m)return s;return _norm(e.partner)===tr?s+(+e.amount||0):s;},0);}
+function tvaExpense(rec){return tvaExpenseFor(rec.fy,rec.model,rec.trade);}
+function cpuText(exp,units){return units>0?fmtL(Math.round(exp/units))+' /unit':'—';}
+function tvaModelAgg(model){const rs=tvaRecords().filter(r=>r.model===model);const t=rs.reduce((s,r)=>s+ +r.target,0),a=rs.reduce((s,r)=>s+ +r.achieved,0);const exp=rs.reduce((s,r)=>s+tvaExpense(r),0);return {target:t,achieved:a,pct:pct(a,t),expense:exp,trades:rs.length,rs};}
+function renderTvaPage(){tvaModel=null;fillTvaTradeList();renderTva();}
+function fillTvaTradeList(){const dl=document.getElementById('tvaTradeList');if(!dl)return;const set=new Map();(DB.partners||[]).forEach(t=>{if(t)set.set(_norm(t),t);});(DB.entries||[]).forEach(e=>{if(e.partner&&!set.has(_norm(e.partner)))set.set(_norm(e.partner),e.partner);});const names=[...set.values()].sort((a,b)=>a.localeCompare(b));dl.innerHTML=names.map(t=>'<option value="'+esc(t)+'">').join('');}
+function tvaPctBadge(p){return '<span class="badge '+(p>=100?'submitted':(p>=70?'pending':'notrec'))+'">'+p+'% achieved</span>';}
+function renderTva(){
+  const modelsV=document.getElementById('tvaModelsView'),tradesV=document.getElementById('tvaTradesView');
+  if(tvaModel&&!DB.tvaModels.includes(tvaModel))tvaModel=null;
+  if(!tvaModel){
+    modelsV.style.display='';tradesV.style.display='none';
+    const recs=tvaRecords();const T=recs.reduce((s,r)=>s+ +r.target,0),A=recs.reduce((s,r)=>s+ +r.achieved,0);const E=recs.reduce((s,r)=>s+tvaExpense(r),0);
+    const tiles=[['Models',DB.tvaModels.length,'#3551E0'],['Total Target',fmtN(T),'#6D5BF6'],['Total Achieved',fmtN(A),'#0EA868'],['Achievement',pct(A,T)+'%','#C99A2E'],['Total Expense',fmtL(E),'#0E9AA8'],['Cost / Unit',cpuText(E,A),'#E0921B']];
+    document.getElementById('tvaSummary').innerHTML=tiles.map(t=>'<div class="stat-tile" style="--tc:'+t[2]+'"><div class="k">'+t[0]+'</div><div class="v">'+t[1]+'</div></div>').join('');
+    const grid=document.getElementById('tvaModelGrid');
+    if(!DB.tvaModels.length){grid.innerHTML=emptyState('🎯','No models yet',canEdit()?'Add a model to start tracking targets.':'No models added yet.',canEdit()?'<button class="btn btn-primary" onclick="openTvaModelModal()">+ Add Model</button>':'');return;}
+    grid.innerHTML=DB.tvaModels.map(mn=>{const a=tvaModelAgg(mn);return '<div class="card camp-card" onclick="tvaOpen(\''+esc(mn).replace(/'/g,"\\'")+'\')"><div class="top"><div><div class="name">'+esc(mn)+'</div><div class="code">'+a.trades+' trade'+(a.trades===1?'':'s')+'</div></div>'+tvaPctBadge(a.pct)+'</div><div class="util-wrap"><div class="util-bar"><span style="width:'+Math.min(100,a.pct)+'%'+(a.pct>=100?';background:linear-gradient(90deg,#0EA868,#22d3ee)':'')+'"></span></div><div class="util-meta"><span>'+fmtN(a.achieved)+' achieved</span><span>of '+fmtN(a.target)+' target</span></div></div><div class="camp-mini" style="margin-top:13px"><div class="m"><div class="v">'+fmtL(a.expense)+'</div><div class="k">Expense</div></div><div class="m"><div class="v">'+cpuText(a.expense,a.achieved)+'</div><div class="k">Cost / Unit</div></div><div class="m"><div class="v">'+fmtN(Math.max(0,a.target-a.achieved))+'</div><div class="k">Gap</div></div></div></div>';}).join('');
+    return;
+  }
+  modelsV.style.display='none';tradesV.style.display='';
+  document.getElementById('tvaModelName').textContent=tvaModel;document.getElementById('tvaModelHead').textContent=tvaModel;
+  const a=tvaModelAgg(tvaModel);
+  const tiles=[['Trades',a.trades,'#3551E0'],['Total Target',fmtN(a.target),'#6D5BF6'],['Total Achieved',fmtN(a.achieved),'#0EA868'],['Achievement',a.pct+'%','#C99A2E'],['Total Expense',fmtL(a.expense),'#0E9AA8'],['Cost / Unit',cpuText(a.expense,a.achieved),'#E0921B']];
+  document.getElementById('tvaModelSummary').innerHTML=tiles.map(t=>'<div class="stat-tile" style="--tc:'+t[2]+'"><div class="k">'+t[0]+'</div><div class="v">'+t[1]+'</div></div>').join('');
+  const grid=document.getElementById('tvaTradeGrid');
+  if(!a.rs.length){grid.innerHTML=emptyState('🤝','No trades yet',canEdit()?'Add a trade target for this model.':'No trade targets added.',canEdit()?'<button class="btn btn-primary" onclick="openTvaModal()">+ Add Trade Target</button>':'');return;}
+  grid.innerHTML=a.rs.map(r=>{const p=pct(r.achieved,r.target);const exp=tvaExpense(r);return '<div class="card camp-card"'+(canEdit()?' onclick="openTvaModal(\''+r.id+'\')"':'')+'><div class="top"><div><div class="name">'+esc(r.trade)+'</div><div class="code">Super-month</div></div>'+tvaPctBadge(p)+'</div><div class="camp-mini" style="margin-top:15px"><div class="m"><div class="v">'+fmtN(r.target)+'</div><div class="k">Target</div></div><div class="m"><div class="v">'+fmtN(r.achieved)+'</div><div class="k">Achieved</div></div><div class="m"><div class="v"'+(p<100?' style="color:#c33"':'')+'>'+fmtN(Math.max(0,r.target-r.achieved))+'</div><div class="k">Gap</div></div></div><div class="camp-mini" style="margin-top:10px;border-top:none;padding-top:0"><div class="m"><div class="v" style="color:var(--teal)">'+fmtL(exp)+'</div><div class="k">Expense</div></div><div class="m"><div class="v" style="color:var(--warning)">'+cpuText(exp,r.achieved)+'</div><div class="k">Cost / Unit</div></div><div class="m"></div></div>'+(canEdit()?'<div class="pc-go" style="color:var(--primary);font-weight:800;font-size:.82rem;margin-top:14px">Edit →</div>':'')+'</div>';}).join('');
+}
+function tvaOpen(mn){tvaModel=mn;renderTva();window.scrollTo({top:0,behavior:'smooth'});}
+function tvaBack(){tvaModel=null;renderTva();}
+function openTvaModelModal(){if(!canEdit())return;document.getElementById('tvModelName').value='';openOverlay('tvaModelModal');}
+function saveTvaModel(){if(!canEdit())return;const n=document.getElementById('tvModelName').value.trim();if(!n){toast('Model name is required','warn');return;}if(!DB.tvaModels.some(m=>m.toLowerCase()===n.toLowerCase()))DB.tvaModels.push(n);save();closeOverlay('tvaModelModal');renderTva();toast('Model added');}
+function updateTvaCalc(){const t=+document.getElementById('tvTarget').value||0,a=+document.getElementById('tvAchieved').value||0;const trade=(document.getElementById('tvTrade').value||'').trim();const p=pct(a,t);const exp=trade?tvaExpenseFor(activeFY,tvaModel,trade):0;
+  document.getElementById('tvaCalc').innerHTML='<div class="cb-row"><span>Achievement</span><b style="color:'+(p>=100?'var(--success)':p>=70?'var(--warning)':'var(--danger)')+'">'+p+'%</b></div><div class="cb-row"><span>Gap to target</span><b>'+fmtN(Math.max(0,t-a))+'</b></div><div class="cb-row"><span>💰 Expense (from Payments)</span><b style="color:var(--teal)">'+fmtL(exp)+'</b></div><div class="cb-row"><span>Cost / Unit achieved</span><b style="color:var(--warning)">'+cpuText(exp,a)+'</b></div>';}
+function openTvaModal(id){if(!canEdit())return;fillTvaTradeList();editingTva=id?DB.tva.find(r=>r.id===id):null;document.getElementById('tvaModalTitle').textContent=editingTva?'Edit Trade Target':'Add Trade Target';document.getElementById('tvaModalSub').textContent=tvaModel;
+  document.getElementById('tvTrade').value=editingTva?editingTva.trade:'';document.getElementById('tvTarget').value=editingTva?editingTva.target:'';document.getElementById('tvAchieved').value=editingTva?editingTva.achieved:'';
+  document.getElementById('tvaDeleteBtn').style.display=editingTva?'inline-flex':'none';updateTvaCalc();openOverlay('tvaModal');}
+function saveTva(){if(!canEdit())return;const trade=document.getElementById('tvTrade').value.trim();if(!trade){toast('Trade partner is required','warn');return;}
+  const target=Math.max(0,+document.getElementById('tvTarget').value||0),achieved=Math.max(0,+document.getElementById('tvAchieved').value||0);
+  if(trade&&!DB.tvaTrades.some(t=>t.toLowerCase()===trade.toLowerCase()))DB.tvaTrades.push(trade);
+  if(editingTva){Object.assign(editingTva,{trade,target,achieved});toast('Target updated');}
+  else{if(tvaRecords().some(r=>r.model===tvaModel&&r.trade.toLowerCase()===trade.toLowerCase())){toast('That trade already exists for this model','warn');return;}DB.tva.push({id:uid(),fy:activeFY,model:tvaModel,trade,target,achieved});toast('Target added');}
+  save();closeOverlay('tvaModal');fillTvaTradeList();renderTva();}
+function deleteTva(){if(!canEdit()||!editingTva)return;const id=editingTva.id;confirmAction('Delete this trade target?','Remove '+editingTva.trade+' from '+tvaModel+'?',()=>{DB.tva=DB.tva.filter(r=>r.id!==id);save();closeOverlay('tvaModal');renderTva();toast('Deleted','info');});}
+
+/* ---------- SETTINGS ---------- */
+function renderSettings(){
+  const xb=(key,i)=>canEdit()?'<button onclick="delMaster(\''+key+'\','+i+')">✕</button>':'';
+  document.getElementById('fyTags').innerHTML=DB.fyList.map((f,i)=>'<span class="tag">'+esc(f)+xb('fyList',i)+'</span>').join('')||'<span style="color:var(--muted);font-size:.8rem">None yet</span>';
+  document.getElementById('partnerTags').innerHTML=DB.partners.map((p,i)=>'<span class="tag">'+esc(p)+xb('partners',i)+'</span>').join('')||'<span style="color:var(--muted);font-size:.8rem">None yet</span>';
+  document.getElementById('activityTags').innerHTML=DB.activities.map((a,i)=>'<span class="tag">'+esc(a)+xb('activities',i)+'</span>').join('')||'<span style="color:var(--muted);font-size:.8rem">None yet</span>';
+  const csr=document.getElementById('cloudSetupRow');if(csr)csr.style.display=cloudActive()?'none':'';
+  const cstr=document.getElementById('cloudStatusRow');if(cstr)cstr.style.display=cloudActive()?'':'none';
+  renderUserMgmt();
+}
+function addMaster(key,inputId){if(!canEdit())return;const v=document.getElementById(inputId).value.trim();if(!v)return;if(!DB[key].includes(v))DB[key].push(v);document.getElementById(inputId).value='';save();renderSettings();refreshFilters();toast('Added');}
+function delMaster(key,i){if(!canEdit())return;DB[key].splice(i,1);save();renderSettings();refreshFilters();}
+
+/* ---------- EXPORTS ---------- */
+function payRowsForExport(){return getPayFiltered().map(e=>({Campaign:e.campaignName,'Trade Partner':e.partner,Activity:e.activity,'Invoice #':e.invoice,'Amount (₹)':e.amount,'Claim %':e.claimPct,'Vivo %':e.vivoPct,'Vivo India Share (₹)':e.vivoAmount,'State Share (₹)':e.stateAmount,'Payment Status':e.payStatus,'Claim Status':e.claimStatus,'Claim Code':e.claimToken,'Received (₹)':e.receivedAmount,'Received Status':e.receivedStatus,'Payment Date':e.payDate,'Claim Date':e.claimDate,'Claim Ref':e.claimRef,Remarks:e.remarks}));}
+function exportData(type){const rows=payRowsForExport();if(!rows.length){toast('Nothing to export','warn');return;}if(type==='csv')downloadCSV(rows,'JBP_Payments_Claims');if(type==='excel')downloadXLSX(rows,'JBP_Payments_Claims','Payments');if(type==='pdf')downloadPDF('JBP Payments & Claims',Object.keys(rows[0]),rows.map(r=>Object.values(r)));toast(type.toUpperCase()+' exported');}
+function exportClaimTracker(type){
+  const list=ctEntries().filter(e=>e.claimStatus!=='Not Required');if(!list.length){toast('Nothing to export','warn');return;}
+  const groups={};list.forEach(e=>{const k=ctMode==='campaign'?campName(e.campaignId):(e.partner||'No Partner');(groups[k]=groups[k]||[]).push(e);});
+  const rows=Object.keys(groups).sort().map(k=>{const gm=metrics(groups[k]);return {[ctMode==='campaign'?'Campaign':'Trade Partner']:k,Entries:gm.count,Submitted:gm.claimsSub,Pending:gm.claimsPend,'Vivo Claim (₹)':gm.claimSubAmt,'State Share (₹)':gm.stateTotal,'Received (₹)':gm.receivedAmt,'Receivable (₹)':gm.receivable,'% Submitted':pct(gm.claimsSub,gm.count)};});
+  const fy=document.getElementById('ctFy').value;
+  if(type==='excel')downloadXLSX(rows,'JBP_ClaimTracker_'+safe(fy),'Claims');else downloadPDF('JBP Claim Tracker · '+fy,Object.keys(rows[0]),rows.map(r=>Object.values(r)));
+  toast(type.toUpperCase()+' exported');
+}
+function exportReport(type){
+  const id=rpCampaign;const c=DB.campaigns.find(x=>x.id===id);if(!c){toast('Open a campaign report first','warn');return;}const m=campMetrics(c);
+  const summary=[{Metric:'Campaign',Value:c.name},{Metric:'Code',Value:c.code},{Metric:'Financial Year',Value:c.fy},{Metric:'Status',Value:c.status},{Metric:'Total Budget (₹)',Value:m.budget},{Metric:'Total Paid (₹)',Value:m.paid},{Metric:'Pending (₹)',Value:m.pending},{Metric:'Budget Utilization %',Value:m.util},{Metric:'Vivo India Share (₹)',Value:m.vivoTotal},{Metric:'State Share (₹)',Value:m.stateTotal},{Metric:'Claims Submitted',Value:m.claimsSub},{Metric:'Vivo Claim Submitted (₹)',Value:m.claimSubAmt},{Metric:'Claim Received (₹)',Value:m.receivedAmt},{Metric:'Receivable Pending (₹)',Value:m.receivable},{Metric:'Recovery Rate %',Value:m.recovery}];
+  if(type==='excel'){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(summary),'Summary');const det=campEntries(id).map(e=>({'Trade Partner':e.partner,Activity:e.activity,Invoice:e.invoice,'Amount (₹)':e.amount,'Claim %':e.claimPct,'Vivo Share (₹)':e.vivoAmount,'State Share (₹)':e.stateAmount,Payment:e.payStatus,Claim:e.claimStatus,Code:e.claimToken,'Received':e.receivedAmount,'Received Status':e.receivedStatus}));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(det.length?det:[{Note:'No entries'}]),'Entries');XLSX.writeFile(wb,'JBP_Report_'+safe(c.name)+'.xlsx');}
+  else{const {jsPDF}=window.jspdf;const doc=new jsPDF();doc.setFontSize(15);doc.text('JBP Campaign Report',14,16);doc.setFontSize(10);doc.setTextColor(120);doc.text(c.name+' · '+(c.code||'')+' · '+c.fy+' · '+c.status,14,23);doc.autoTable({startY:30,head:[['Metric','Value']],body:summary.map(r=>[r.Metric,String(r.Value)]),theme:'grid',headStyles:{fillColor:[53,81,224]},styles:{fontSize:9}});const det=campEntries(id);if(det.length)doc.autoTable({startY:doc.lastAutoTable.finalY+8,head:[['Trade Partner','Activity','Amt','Pay','Claim','C.Amt','Code','Recd']],body:det.map(e=>[e.partner,e.activity,e.amount,e.payStatus,e.claimStatus,e.claimAmount,e.claimToken,e.receivedAmount]),theme:'striped',headStyles:{fillColor:[14,168,104]},styles:{fontSize:8}});doc.save('JBP_Report_'+safe(c.name)+'.pdf');}
+  toast('Report exported');
+}
+function safe(s){return String(s).replace(/[^a-z0-9]+/gi,'_');}
+function downloadCSV(rows,name){const keys=Object.keys(rows[0]);const csv=[keys.join(','),...rows.map(r=>keys.map(k=>'"'+String(r[k]??'').replace(/"/g,'""')+'"').join(','))].join('\n');triggerDl(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),name+'.csv');}
+function downloadXLSX(rows,name,sheet){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),sheet);XLSX.writeFile(wb,name+'.xlsx');}
+function downloadPDF(title,head,body){const {jsPDF}=window.jspdf;const doc=new jsPDF('l');doc.setFontSize(15);doc.text(title,14,15);doc.autoTable({startY:22,head:[head],body,theme:'striped',headStyles:{fillColor:[53,81,224]},styles:{fontSize:7,cellPadding:2}});doc.save(safe(title)+'.pdf');}
+function triggerDl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);}
+
+function exportBackup(){if(!VAULT){toast('Nothing to back up','warn');return;}triggerDl(new Blob([JSON.stringify(VAULT,null,2)],{type:'application/json'}),'JBP_vault_backup.json');toast('Encrypted backup downloaded');}
+function exportPlaintext(){if(!canEdit()){toast('Admin only','warn');return;}if(!STORE){toast('Sign in first','warn');return;}confirmAction('Export readable data?','This file is UNENCRYPTED — anyone who opens it can read everything. Store it somewhere safe.',()=>{triggerDl(new Blob([JSON.stringify(STORE,null,2)],{type:'application/json'}),'JBP_readable_backup.json');toast('Readable backup downloaded — keep it safe','warn');},'Export');}
+function buildShareHTML(){
+  const op=[...document.querySelectorAll('.overlay.open')];op.forEach(o=>o.classList.remove('open'));
+  const th=document.getElementById('toastWrap').innerHTML;document.getElementById('toastWrap').innerHTML='';
+  const ls=document.getElementById('loginScreen');const lsHidden=ls.classList.contains('hide');ls.classList.remove('hide');
+  const intro=document.getElementById('introScreen'),portal=document.getElementById('portalScreen'),yr=document.getElementById('yearScreen');
+  const iH=intro.classList.contains('hide'),pH=portal.classList.contains('hide'),yH=yr.classList.contains('hide');intro.classList.add('hide');portal.classList.add('hide');yr.classList.add('hide');
+  const snap={id:uid(),ts:Date.now(),vault:JSON.parse(JSON.stringify(VAULT))};
+  let html='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
+  if(lsHidden)ls.classList.add('hide');if(!iH)intro.classList.remove('hide');if(!pH)portal.classList.remove('hide');if(!yH)yr.classList.remove('hide');
+  document.getElementById('toastWrap').innerHTML=th;
+  const re=new RegExp('let EMBEDDED_DATA = [\\s\\S]*?; '+'/\\*__EMBED__\\*/');
+  if(!re.test(html))return null;
+  const json=JSON.stringify(snap).replace(/</g,'\\u003c');
+  return html.replace(re,()=>'let EMBEDDED_DATA = '+json+'; '+'/*__EMBED__*/');
+}
+async function exportShareable(){if(!DEK||!STORE){toast('Please sign in first','warn');return;}try{VAULT.data=await encData(DEK,{ws:STORE.ws});}catch(e){}const html=buildShareHTML();if(!html){toast('Could not build share file','err');return;}triggerDl(new Blob([html],{type:'text/html'}),'JBP_Tracker_Shared_'+todayISO()+'.html');toast('Encrypted share file downloaded — recipients log in to decrypt');}
+function importBackup(input){if(!canEdit())return;const f=input.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(d&&d.users&&d.data){VAULT=d;persistVault();toast('Encrypted vault restored — please sign in');doLogout();}else{toast('Not a valid vault backup','err');}}catch(e){toast('Invalid backup file','err');}};r.readAsText(f);input.value='';}
+function resetWorkspace(){if(!canEdit())return;const nm=activeWs==='jbp'?'JBP':'Vivo India Activities';confirmAction('Reset this workspace?','This clears all data in the '+nm+' workspace and starts blank.',()=>{STORE.ws[activeWs]=normalize(seed());setWorkspace(activeWs);save();toast(nm+' workspace reset','info');navTo('dashboard');},'Reset');}
+
+/* ---------- AUTH (sign-in gate) ---------- */
+let currentUser=null;
+function ensureVivoHO(v){if(v&&!v.hoV1){if((v.partners||[]).indexOf('HO')<0)v.partners.push('HO');v.hoV1=true;}return v;}
+function buildMemStore(data){const s={auth:{users:VAULT.users.map(x=>({u:x.u,role:x.role}))},ws:{jbp:normalize(data.ws&&data.ws.jbp||seed()),vivo:normalize(data.ws&&data.ws.vivo||seed())}};ensureVivoHO(s.ws.vivo);return s;}
+async function doLogin(){
+  const u=document.getElementById('loginUser').value.trim();
+  const p=document.getElementById('loginPass').value;
+  const errEl=document.getElementById('loginErr');
+  if(!u||!p){errEl.textContent='Enter username and password';return;}
+  errEl.textContent='Unlocking…';
+  /* 1) CLOUD login (preferred) */
+  if(FB_OK){
+    try{
+      await cloudSignIn(u,p);
+      const cv=await cloudLoadVault();
+      if(cv){
+        const entry=cv.users.find(x=>x.u.toLowerCase()===u.toLowerCase());
+        if(entry){
+          DEKraw=await unwrapSecret(entry,p);DEK=await importDEK(DEKraw);
+          VAULT=cv;STORE=buildMemStore(await decData(DEK,VAULT.data));
+          currentUser={u:entry.u,role:entry.role};
+          CLOUD_MODE=true;localStorage.setItem('jbp_cloud_on','1');persistVault();
+          startCloudSync();finishLoginUI();return;
+        }
+        await cloudSignOut();errEl.textContent='Invalid username or password';return;
+      }
+      await cloudSignOut();
+      if(cloudActive()){errEl.textContent='Cloud has no data yet — run setup on your original device';return;}
+      /* else: pre-migration, fall through to local */
+    }catch(e){
+      if(cloudActive()){errEl.textContent='Invalid login, or no internet connection';return;}
+      /* else: accounts not created yet (pre-migration) → try local */
+    }
+  }
+  /* 2) LOCAL login (before migration, or Firebase unavailable) */
+  if(VAULT){
+    const entry=VAULT.users.find(x=>x.u.toLowerCase()===u.toLowerCase());
+    if(entry){
+      try{
+        DEKraw=await unwrapSecret(entry,p);DEK=await importDEK(DEKraw);
+        STORE=buildMemStore(await decData(DEK,VAULT.data));
+        currentUser={u:entry.u,role:entry.role};CLOUD_MODE=false;
+        finishLoginUI();return;
+      }catch(e){}
+    }
+  }
+  DEK=null;DEKraw=null;STORE=null;errEl.textContent='Invalid username or password';
+}
+async function recoveryLogin(){
+  if(!VAULT||!VAULT.recovery)return;
+  const code=document.getElementById('recoveryInput').value.trim();const errEl=document.getElementById('loginErr');
+  if(!code){errEl.textContent='Enter your recovery key';return;}
+  errEl.textContent='Unlocking…';
+  try{
+    DEKraw=await unwrapSecret(VAULT.recovery,code);DEK=await importDEK(DEKraw);
+    STORE=buildMemStore(await decData(DEK,VAULT.data));
+    currentUser={u:'Recovery',role:'admin'};
+    errEl.textContent='';document.getElementById('loginScreen').classList.add('hide');
+    setUserChrome();playIntro(()=>{showPortal();toast('Recovered via key — please reset passwords in Settings.','warn');});
+  }catch(e){DEK=null;DEKraw=null;STORE=null;errEl.textContent='Invalid recovery key';}
+}
+function toggleRecovery(){const r=document.getElementById('recoveryRow');r.style.display=r.style.display==='none'?'block':'none';if(r.style.display==='block')document.getElementById('recoveryInput').focus();}
+async function doLogout(){await flushSave();stopCloudSync();try{await cloudSignOut();}catch(e){}CLOUD_MODE=false;DEK=null;DEKraw=null;STORE=null;DB=null;currentUser=null;activeFY='';document.getElementById('introScreen').classList.add('hide');document.getElementById('portalScreen').classList.add('hide');document.getElementById('yearScreen').classList.add('hide');const ls=document.getElementById('loginScreen');ls.classList.remove('hide');document.getElementById('loginUser').value='';document.getElementById('loginPass').value='';setTimeout(()=>document.getElementById('loginUser').focus(),60);}
+function setUserChrome(){const a=document.getElementById('userAvatar');if(a&&currentUser){a.textContent=currentUser.u.slice(0,2).toUpperCase();a.title=currentUser.u+' · '+currentUser.role;}
+  if(currentUser){const ini=currentUser.u.slice(0,2).toUpperCase();const um=document.getElementById('umAvatar');if(um)um.textContent=ini;const un=document.getElementById('umName');if(un)un.textContent=currentUser.u;const ur=document.getElementById('umRole');if(ur)ur.textContent=currentUser.role==='admin'?'Owner · full access':'Viewer · read-only';}
+  document.body.classList.toggle('viewer',!canEdit());const rc=document.getElementById('roleChip');if(rc)rc.style.display=canEdit()?'none':'inline-flex';if(typeof resetIdle==='function')resetIdle();}
+function toggleUserMenu(ev){ev.stopPropagation();document.getElementById('userMenu').classList.toggle('open');}
+function closeUserMenu(){const m=document.getElementById('userMenu');if(m)m.classList.remove('open');}
+document.addEventListener('click',e=>{if(!e.target.closest('.usermenu'))closeUserMenu();});
+function initApp(){refreshFilters();renderDashboard();}
+async function runSetup(){
+  if(!cryptoOK()){document.getElementById('loginErr').textContent='Encryption needs Chrome/Edge. Open the file there.';document.getElementById('loginScreen').classList.remove('hide');return;}
+  const pt=loadPlaintext()||normalizeStore(defaultStore());
+  const baseUsers=(pt.auth.users&&pt.auth.users.length?pt.auth.users:defaultUsers()).map(u=>({u:u.u,role:u.role,pass:'1234'}));
+  const dek=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt','decrypt']);
+  const dekRaw=new Uint8Array(await crypto.subtle.exportKey('raw',dek));
+  const vu=[];for(const us of baseUsers){const w=await wrapSecret(dekRaw,us.pass);vu.push(Object.assign({u:us.u,role:us.role},w));}
+  const code=genRecoveryCode();const rw=await wrapSecret(dekRaw,code);
+  const data=await encData(dek,{ws:pt.ws});
+  VAULT={v:1,users:vu,recovery:rw,data};
+  localStorage.removeItem('jbpTracker_app_v3');localStorage.removeItem('jbpTracker_v2');
+  persistVault();
+  showRecoveryModal(code);
+}
+function showRecoveryModal(code){document.getElementById('recoveryCode').textContent=code;openOverlay('recoveryModal');}
+function finishSetup(){closeOverlay('recoveryModal');document.getElementById('loginScreen').classList.remove('hide');setTimeout(()=>document.getElementById('loginUser').focus(),100);}
+function copyRecovery(){const t=document.getElementById('recoveryCode').textContent;if(navigator.clipboard)navigator.clipboard.writeText(t);toast('Recovery key copied');}
+function gateInit(){
+  if(VAULT||cloudActive()||FB_OK){document.getElementById('loginScreen').classList.remove('hide');setTimeout(()=>document.getElementById('loginUser').focus(),100);}
+  else{runSetup();}
+}
+/* intro animation */
+let introCb=null,introTimer=null;
+function playIntro(cb){introCb=cb;const el=document.getElementById('introScreen');el.classList.remove('hide');const stg=el.querySelector('.intro-stage');stg.classList.remove('go');void stg.offsetWidth;stg.classList.add('go');clearTimeout(introTimer);introTimer=setTimeout(endIntro,2600);}
+function endIntro(){clearTimeout(introTimer);document.getElementById('introScreen').classList.add('hide');const cb=introCb;introCb=null;if(cb)cb();}
+/* portal chooser */
+function showPortal(){document.getElementById('introScreen').classList.add('hide');document.getElementById('portalScreen').classList.remove('hide');renderPortalCounts();}
+function renderPortalCounts(){
+  if(!STORE)return;
+  const j=STORE.ws.jbp,v=STORE.ws.vivo;
+  document.getElementById('pcJbp').textContent=j.campaigns.length+' campaigns · '+j.entries.length+' entries';
+  document.getElementById('pcVivo').textContent=v.campaigns.length+' campaigns · '+v.entries.length+' entries';
+  const who=document.getElementById('portalWho');if(who&&currentUser)who.textContent='Signed in as '+currentUser.u;
+}
+function selectPortal(ws){setWorkspace(ws);document.getElementById('portalScreen').classList.add('hide');setWsChrome();showYearScreen();}
+function showYearScreen(){renderYearCards();const w=document.getElementById('yearWho');if(w&&currentUser)w.textContent='Signed in as '+currentUser.u;const lbl=document.getElementById('yearWsLabel');if(lbl)lbl.textContent=(activeWs==='jbp'?'JBP':'Vivo India Activities')+' workspace';document.getElementById('yearScreen').classList.remove('hide');}
+function renderYearCards(){
+  const wrap=document.getElementById('yearCards');
+  wrap.innerHTML=DB.fyList.map(f=>{
+    const ids=new Set(DB.campaigns.filter(c=>c.fy===f).map(c=>c.id));
+    const n=ids.size, ent=DB.entries.filter(e=>ids.has(e.campaignId)).length;
+    return '<div class="portal-card" onclick="selectYear(\''+esc(f)+'\')"><div class="pc-ic">📅</div><h2>'+esc(f)+'</h2><p>Financial year '+esc(f.replace('FY ',''))+'</p><div class="pc-stat">'+n+' campaigns · '+ent+' entries</div><div class="pc-go">View this year →</div></div>';
+  }).join('');
+}
+function selectYear(fy){activeFY=fy;document.getElementById('yearScreen').classList.add('hide');refreshFilters();const s=document.getElementById('fySelect');if(s)s.value=fy;navTo('dashboard');}
+function goHome(){document.getElementById('yearScreen').classList.add('hide');document.getElementById('portalScreen').classList.remove('hide');renderPortalCounts();}
+function setWsChrome(){const c=document.getElementById('wsChip');if(c)c.textContent=activeWs==='jbp'?'JBP':'Vivo India Activities';}
+/* user management (Settings) */
+function renderUserMgmt(){
+  if(!currentUser)return;
+  const isAdmin=currentUser.role==='admin';
+  const rows=STORE.auth.users.map((u,i)=>{
+    if(!isAdmin&&u.u!==currentUser.u)return '';
+    const self=u.u===currentUser.u;
+    return '<div class="set-row"><div><b style="font-size:.9rem">'+esc(u.u)+'</b> '+(u.role==='admin'?'<span class="badge submitted">admin</span>':'<span class="badge draft">user</span>')+(self?' <span style="font-size:.72rem;color:var(--muted)">(you)</span>':'')+'</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="password" class="input" id="np_'+i+'" placeholder="'+(self?'New password':'Reset password')+'" style="width:150px"><button class="btn btn-ghost btn-sm" onclick="setUserPassword('+i+')">Set</button>'+(isAdmin&&!self?'<button class="btn btn-danger btn-sm" onclick="removeUser('+i+')">Remove</button>':'')+'</div></div>';
+  }).join('');
+  document.getElementById('userList').innerHTML=rows;
+  document.getElementById('addUserBox').innerHTML=isAdmin?'<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:16px"><input id="auUser" class="input" placeholder="New username" style="flex:1;min-width:120px"><input id="auPass" type="password" class="input" placeholder="Password" style="width:140px"><select id="auRole" class="select"><option value="viewer">Viewer (read-only)</option><option value="admin">Admin (full edit)</option></select><button class="btn btn-primary btn-sm" onclick="addUser()">+ Add User</button></div>':'';
+  document.getElementById('umNote').textContent=isAdmin?'You are an admin — reset any password, add or remove users.':'Change your own password below.';
+}
+async function setUserPassword(i){const inp=document.getElementById('np_'+i);const v=inp.value;if(!v){toast('Enter a new password','warn');return;}if(!DEKraw){toast('Please sign in again','warn');return;}const e=VAULT.users[i];
+  if(CLOUD_MODE){
+    if(v.length<6){toast('Cloud passwords must be at least 6 characters','warn');return;}
+    const isSelf=currentUser&&e.u.toLowerCase()===currentUser.u.toLowerCase();
+    if(!isSelf){toast('In cloud mode each person changes their own password — sign in as '+e.u,'warn');return;}
+    try{await fbAuth().currentUser.updatePassword(v);}catch(err){toast('Could not update password: '+(err.code==='auth/requires-recent-login'?'please log out and back in first':(err.message||err.code)),'err');return;}
+    const w=await wrapSecret(DEKraw,v);e.salt=w.salt;e.iv=w.iv;e.wrapped=w.wrapped;e.iter=w.iter;persistVault();lastLocalWrite=Date.now();try{await cloudSaveVault(VAULT);}catch(e2){}inp.value='';toast('Your password is updated');return;
+  }
+  const w=await wrapSecret(DEKraw,v);e.salt=w.salt;e.iv=w.iv;e.wrapped=w.wrapped;e.iter=w.iter;persistVault();inp.value='';toast('Password updated for '+e.u);}
+function removeUser(i){if(!canEdit())return;const u=VAULT.users[i];if(currentUser&&u.u===currentUser.u){toast('You cannot remove yourself','warn');return;}if(u.role==='admin'&&VAULT.users.filter(x=>x.role==='admin').length<=1){toast('At least one admin is required','warn');return;}confirmAction('Remove user?','Remove '+u.u+' from sign-in access?',()=>{VAULT.users.splice(i,1);STORE.auth.users=VAULT.users.map(x=>({u:x.u,role:x.role}));persistVault();renderUserMgmt();toast('User removed','info');});}
+async function addUser(){if(!canEdit())return;const u=document.getElementById('auUser').value.trim();const p=document.getElementById('auPass').value;const role=document.getElementById('auRole').value;if(!u||!p){toast('Username and password required','warn');return;}if(VAULT.users.some(x=>x.u.toLowerCase()===u.toLowerCase())){toast('Username already exists','warn');return;}if(!DEKraw){toast('Please sign in again','warn');return;}const w=await wrapSecret(DEKraw,p);VAULT.users.push(Object.assign({u,role},w));STORE.auth.users=VAULT.users.map(x=>({u:x.u,role:x.role}));persistVault();renderUserMgmt();document.getElementById('auUser').value='';document.getElementById('auPass').value='';toast('User '+u+' added');}
+
+/* ---------- init ---------- */
+window.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open'));});
+/* autosave flush on tab hide / close (reduces the debounce race) */
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushSave();});
+window.addEventListener('pagehide',flushSave);window.addEventListener('blur',flushSave);
+/* idle auto-lock — log out after 15 min of inactivity (confidential data) */
+const IDLE_MS=15*60*1000;let idleTimer=null;
+function resetIdle(){clearTimeout(idleTimer);if(!currentUser)return;idleTimer=setTimeout(()=>{if(!currentUser)return;flushSave();doLogout();toast('Signed out after 15 min of inactivity','info');},IDLE_MS);}
+['mousemove','keydown','click','scroll','touchstart'].forEach(ev=>window.addEventListener(ev,resetIdle,{passive:true}));
+/* Pre-deploy safeguard: a copy with data baked in must never run from a public URL */
+function isUnsafeEmbeddedHost(hasEmbed,proto,host){host=(host||'').toLowerCase();const isPublic=(proto==='http:'||proto==='https:')&&!/^(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|\[::1\])$/.test(host);return !!hasEmbed&&isPublic;}
+function deploymentGuard(){
+  try{
+    if(isUnsafeEmbeddedHost(EMBEDDED_DATA,location.protocol,location.hostname)){
+      document.body.innerHTML='<div style="position:fixed;inset:0;z-index:99999;background:#0b1124;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;font-family:Inter,system-ui,sans-serif"><div style="max-width:560px;background:#141d38;border:1px solid #2a3a66;border-radius:20px;padding:34px;box-shadow:0 40px 90px -30px rgba(0,0,0,.7)"><div style="font-size:2.6rem">🛑</div><h1 style="font-size:1.4rem;margin:12px 0 6px;font-family:Sora,Inter,sans-serif">Confidential data must not be hosted publicly</h1><p style="color:#aeb9d4;font-size:.94rem;line-height:1.55">This copy has <b>data baked into the file</b>, and it is being served from a public web address (<b>'+esc(location.hostname)+'</b>).<br><br>A file with embedded data is only safe when you <b>double-click it on a trusted computer</b>. Serving it from a public URL exposes the encrypted vault to anyone who has the link.</p><p style="color:#ffd6d6;font-size:.88rem;margin-top:16px;line-height:1.5">For a public deployment, host the <b>blank</b> tool (no embedded data) and set strong passwords in Settings.</p></div></div>';
+      return false;
+    }
+  }catch(e){}
+  return true;
+}
+if(deploymentGuard()){
+  if(EMBEDDED_DATA){const d=new Date(EMBEDDED_DATA.ts).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});const pill=document.querySelector('.topbar .pill');if(pill)pill.innerHTML='<span class="dot"></span><span class="lbl">Shared copy · '+d+'</span>';}
+  gateInit();
+}
+</script>
+</body>
+</html>
