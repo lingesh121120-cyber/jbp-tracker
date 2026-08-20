@@ -655,6 +655,8 @@ body.viewer .needs-edit{display:none!important}
 
       <!-- DASHBOARD -->
       <section class="view active" id="view-dashboard">
+        <div id="execSnapshot"></div>
+        <div class="section-head" style="margin:10px 2px 14px"><div><h3>Details</h3><p>Full breakdown, charts &amp; trends</p></div></div>
         <div class="kpi-grid" id="kpiGrid"></div>
         <div class="chart-grid">
           <div class="card chart-card"><h4>Payment Status</h4><div class="csub">Paid vs Pending across all entries (₹)</div><div class="chart-box"><canvas id="chartPayment"></canvas></div></div>
@@ -1234,6 +1236,7 @@ function svgIc(p){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 function renderDashboard(){
   const camps=fyCampaigns();
   const m=metrics(fyEntries());
+  renderExecSnapshot(m,camps);
   const activeC=camps.filter(c=>c.status==='Active').length;
   const cards=[
     {c:'#3551E0',ic:ICONS.campaigns,val:camps.length,lbl:'Total Campaigns',g:activeC+' active',gc:''},
@@ -1247,6 +1250,43 @@ function renderDashboard(){
   ];
   document.getElementById('kpiGrid').innerHTML=cards.map(k=>'<div class="kpi" style="--c:'+k.c+'"><div class="top"><div class="ic">'+svgIc(k.ic)+'</div><div class="growth '+k.gc+'">'+(k.gc!=='down'&&k.gc!=='flat'?'▲ ':'')+k.g+'</div></div><div class="val">'+k.val+'</div><div class="lbl">'+k.lbl+'</div></div>').join('');
   renderActivity();drawDashCharts(m);
+}
+/* ---------- Executive Snapshot (30-second view) ---------- */
+function renderExecSnapshot(m,camps){
+  const box=document.getElementById('execSnapshot');if(!box)return;
+  const budget=camps.reduce((s,c)=>s+ +c.budget,0);
+  const head='<div class="section-head" style="margin:2px 2px 14px"><div><h3>Executive snapshot</h3><p>The 30-second view — money, risks &amp; results</p></div></div>';
+  if(!camps.length){box.innerHTML=head+'<div class="card" style="padding:24px;text-align:center;color:var(--muted)">No campaigns in this year yet — add data to see the snapshot.</div>';return;}
+  const ents=fyEntries(),now=Date.now();
+  let overdueAmt=0,unclaimedVivo=0,notSubCount=0;
+  ents.forEach(e=>{
+    if(e.claimStatus==='Submitted'){const out=(+e.claimAmount||0)-(+e.receivedAmount||0);if(out>0&&e.claimDate){const days=(now-Date.parse(e.claimDate))/86400000;if(days>60)overdueAmt+=out;}}
+    if(e.claimStatus==='Not Submitted'){unclaimedVivo+=(+e.vivoAmount||0);notSubCount++;}
+  });
+  const overBudget=camps.filter(c=>campMetrics(c).util>100);
+  const hasClaims=m.claimSubAmt>0;
+  const recVal=hasClaims?m.recovery+'%':'—';
+  const recCol=!hasClaims?'var(--muted)':(m.recovery>=80?'var(--success)':(m.recovery>=50?'var(--warning)':'var(--danger)'));
+  const hero=[
+    ['Total paid',fmtL(m.paid),pct(m.paid,budget)+'% of '+fmtL(budget)+' budget','var(--text)'],
+    ['To recover from Vivo',fmtL(m.receivable),'claims submitted, awaiting money',m.receivable>0?'var(--warning)':'var(--success)'],
+    ['Recovery rate',recVal,'received of submitted',recCol],
+    ['Not yet claimed',fmtL(unclaimedVivo),'Vivo share still to claim',unclaimedVivo>0?'var(--danger)':'var(--success)']
+  ];
+  const heroHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:16px">'+hero.map(c=>'<div class="card" style="padding:18px 20px"><div style="font-size:.78rem;color:var(--muted);font-weight:600">'+c[0]+'</div><div style="font-family:Sora,sans-serif;font-size:1.7rem;font-weight:800;letter-spacing:-.5px;margin-top:6px;color:'+c[3]+'">'+c[1]+'</div><div style="font-size:.72rem;color:var(--muted);margin-top:4px">'+c[2]+'</div></div>').join('')+'</div>';
+  const items=[];
+  if(overdueAmt>0)items.push(['var(--danger)','Claims older than 60 days awaiting Vivo — follow up',fmtL(overdueAmt)]);
+  if(unclaimedVivo>0)items.push(['var(--warning)','Not yet claimed across '+notSubCount+' '+(notSubCount===1?'entry':'entries')+' — submit to recover',fmtL(unclaimedVivo)]);
+  if(overBudget.length)items.push(['var(--warning)','Campaigns over budget — '+overBudget.slice(0,2).map(c=>esc(c.name)+' +'+(campMetrics(c).util-100)+'%').join(', ')+(overBudget.length>2?' +'+(overBudget.length-2)+' more':''),overBudget.length]);
+  if(m.pending>0)items.push(['#6D5BF6','Payments still pending to clear',fmtL(m.pending)]);
+  const attHTML='<div class="card" style="padding:18px 20px;margin-bottom:16px"><h4 style="font-size:.96rem;font-weight:800;margin-bottom:4px">⚠ Needs attention</h4>'+(items.length?items.slice(0,4).map(it=>'<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px dashed var(--line)"><span style="width:9px;height:9px;border-radius:50%;background:'+it[0]+';flex:none"></span><div style="flex:1;font-size:.86rem;font-weight:600">'+it[1]+'</div><div style="font-size:.9rem;font-weight:800;color:'+it[0]+';white-space:nowrap">'+it[2]+'</div></div>').join(''):'<div style="padding:12px 0;color:var(--success);font-weight:700">✓ All clear — nothing needs chasing right now</div>')+'</div>';
+  const recs=(typeof tvaRecords==='function')?tvaRecords():[];
+  const T=recs.reduce((s,r)=>s+ +r.target,0),A=recs.reduce((s,r)=>s+ +r.achieved,0);
+  let barLabel,barPct,barColor;
+  if(T>0){barLabel='Super-month target achievement';barPct=pct(A,T);barColor='linear-gradient(90deg,var(--success),#22d3ee)';}
+  else{barLabel='Budget utilization';barPct=pct(m.paid,budget);barColor=barPct>100?'linear-gradient(90deg,var(--danger),var(--warning))':'linear-gradient(90deg,var(--primary),#22d3ee)';}
+  const barHTML='<div class="card" style="padding:16px 20px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:.8rem;color:var(--muted);font-weight:600">'+barLabel+'</span><span style="font-size:1rem;font-weight:800;font-family:Sora,sans-serif">'+barPct+'%</span></div><div style="height:9px;border-radius:9px;background:var(--bg);box-shadow:var(--nm-in-sm);margin-top:10px;overflow:hidden"><span style="display:block;height:100%;width:'+Math.min(100,barPct)+'%;background:'+barColor+';border-radius:9px"></span></div></div>';
+  box.innerHTML=head+heroHTML+attHTML+barHTML;
 }
 function renderActivity(){
   const map={campaign:['#e6ebfd','📣'],payment:['#d7f4e7','💳'],claim:['#cfeef2','📄'],received:['#d7f4e7','📥'],edit:['#ece9fd','✏️'],delete:['#fbe0e1','🗑️']};
